@@ -109,7 +109,7 @@ const MODEL_LINEAR = linearBasisModel(
   'Linear',
   'Distanz wächst gleichmäßig mit den Steps.',
   (s) => [1, s],
-  3
+  6
 );
 
 /* d = a*s^2 + b*s + c — physikalisch motiviert: die gespeicherte Energie einer
@@ -120,7 +120,7 @@ const MODEL_QUADRATIC = linearBasisModel(
   'Quadratisch',
   'Federenergie wächst quadratisch mit dem Auszug.',
   (s) => [1, s, s * s],
-  4
+  9
 );
 
 /* Kubisch — fängt zusätzliche Nichtlinearität ab (Reibung, Gummi-Kennlinie). */
@@ -129,7 +129,7 @@ const MODEL_CUBIC = linearBasisModel(
   'Kubisch',
   'Zusätzliche Krümmung, z. B. durch nachgebendes Gummi.',
   (s) => [1, s, s * s, s * s * s],
-  6
+  12
 );
 
 /* d = a*s^b, gefittet im Log-Raum. Skaleninvariantes Potenzgesetz. */
@@ -137,7 +137,7 @@ const MODEL_POWER = {
   id: 'power',
   label: 'Potenzgesetz',
   description: 'Distanz folgt einer festen Potenz der Steps (d = a·s^b).',
-  minPoints: 4,
+  minPoints: 6,
   fit(points) {
     const usable = points.filter((p) => p.steps > 0 && p.distance > 0);
     if (usable.length < this.minPoints) return null;
@@ -170,7 +170,7 @@ const MODEL_SATURATING = {
   id: 'saturating',
   label: 'Sättigung',
   description: 'Mehr Steps bringen ab einem Punkt kaum noch Weite.',
-  minPoints: 5,
+  minPoints: 9,
   fit(points) {
     const steps = points.map((p) => p.steps);
     const s0 = Math.min(...steps);
@@ -211,6 +211,116 @@ const MODELS = [
   MODEL_SATURATING,
 ];
 
+/* ---------- Vorwissen aus den bisherigen Seilen ----------
+ *
+ * Ein frisch gebundenes Seil hat noch keine eigene Messreihe. Mit drei Schüssen
+ * lässt sich keine Kurve bestimmen — wohl aber, WO auf einer bereits bekannten
+ * Kurve man sich befindet. Denn die Form ist bei allen Seilen ähnlich; was sich
+ * ändert, ist im Wesentlichen die Verschiebung (ab wann die Schleuder
+ * überhaupt wirft) und die Streckung (wie kräftig sie ist).
+ *
+ * Deshalb treten zusätzlich zwei Familien an, die die bekannte Form übernehmen
+ * und daran nur ein bis zwei Stellgrößen anpassen. Sie brauchen entsprechend
+ * wenige Punkte. Weil alle Familien über dieselbe Kreuzvalidierung laufen,
+ * regelt sich der Übergang von selbst: anfangs gewinnt das Vorwissen, sobald
+ * genug eigene Schüsse da sind, übernehmen die freien Familien.
+ */
+
+/* Die Referenzkurve wird außerhalb ihres Messbereichs linear fortgesetzt.
+ * Ein Kubischer würde dort sonst wegkippen. */
+function asPrior(model) {
+  if (!model || !model.ready) return null;
+
+  const steps = model.points.map((p) => p.steps);
+  const lo = Math.min(...steps);
+  const hi = Math.max(...steps);
+  const h = Math.max((hi - lo) * 0.01, 1);
+
+  const f = (s) => model.fitted.predict(s);
+  const slopeLo = (f(lo + h) - f(lo)) / h;
+  const slopeHi = (f(hi) - f(hi - h)) / h;
+
+  return {
+    range: [lo, hi],
+    predict(s) {
+      if (s < lo) return f(lo) + (s - lo) * slopeLo;
+      if (s > hi) return f(hi) + (s - hi) * slopeHi;
+      return f(s);
+    },
+  };
+}
+
+/* Sucht die Verschiebung (und optional die Streckung), mit der die
+ * Referenzkurve am besten auf die vorhandenen Punkte passt. */
+function fitPrior(prior, points, withScale) {
+  const span = prior.range[1] - prior.range[0];
+  const y = points.map((p) => p.distance);
+
+  const evaluate = (shift) => {
+    const f = points.map((p) => prior.predict(p.steps - shift));
+    let k = 1;
+    if (withScale) {
+      let num = 0;
+      let den = 0;
+      for (let i = 0; i < f.length; i++) {
+        num += y[i] * f[i];
+        den += f[i] * f[i];
+      }
+      if (den < 1e-12) return null;
+      k = num / den;
+      if (k <= 0) return null;
+    }
+    let sse = 0;
+    for (let i = 0; i < f.length; i++) {
+      const r = y[i] - k * f[i];
+      sse += r * r;
+    }
+    return { sse, shift, k };
+  };
+
+  let best = null;
+  const coarse = span * 0.6;
+  for (let i = -60; i <= 60; i++) {
+    const c = evaluate((coarse * i) / 60);
+    if (c && (!best || c.sse < best.sse)) best = c;
+  }
+  if (!best) return null;
+
+  /* Nachschärfen um das gefundene Optimum herum. */
+  let stepWidth = coarse / 60;
+  for (let round = 0; round < 3; round++) {
+    for (let i = -10; i <= 10; i++) {
+      const c = evaluate(best.shift + (stepWidth * i) / 10);
+      if (c && c.sse < best.sse) best = c;
+    }
+    stepWidth /= 10;
+  }
+
+  return best;
+}
+
+function makePriorModel(prior, withScale) {
+  return {
+    id: withScale ? 'prior-scaled' : 'prior-shifted',
+    label: withScale ? 'Vorwissen, angepasst' : 'Vorwissen, verschoben',
+    description: withScale
+      ? 'Kurvenform der bisherigen Seile, seitlich verschoben und gestreckt.'
+      : 'Kurvenform der bisherigen Seile, nur seitlich verschoben.',
+    minPoints: withScale ? 3 : 2,
+    fit(points) {
+      const best = fitPrior(prior, points, withScale);
+      if (!best) return null;
+      return {
+        predict(s) {
+          return best.k * prior.predict(s - best.shift);
+        },
+        params: [best.shift, best.k],
+        nParams: withScale ? 2 : 1,
+      };
+    },
+  };
+}
+
 /* ---------- Bewertung ----------
  *
  * Echte Leave-One-Out-Kreuzvalidierung: jeder Punkt wird einmal weggelassen,
@@ -220,35 +330,70 @@ const MODELS = [
  * fair mitbewertet werden.
  */
 function crossValidate(model, points) {
-  if (points.length < model.minPoints + 1) return null;
+  const n = points.length;
+  if (n < model.minPoints + 1) return null;
 
-  let sse = 0;
+  const squared = [];
   let absSum = 0;
-  let count = 0;
 
-  for (let i = 0; i < points.length; i++) {
-    const train = points.slice(0, i).concat(points.slice(i + 1));
+  /* Die Punkte liegen nach Steps sortiert vor, und weggelassen wird nicht
+   * einzeln, sondern blockweise. Das ist hier entscheidend: beim Einschießen
+   * arbeitet man sich von kurz nach weit hoch, die Kurve muss also über den
+   * gemessenen Bereich hinaus tragen. Ein einzeln weggelassener Punkt ist von
+   * Nachbarn umzingelt und misst nur Interpolation — der erste und der letzte
+   * Block dagegen prüfen genau das Hinausreichen. Familien, die daneben
+   * wegkippen, fallen so auf, statt sich gut zu rechnen. */
+  /* Wie viele Blöcke, hängt an der Datenlage. Bei einem frischen Seil deckt die
+   * Messreihe nur einen schmalen Streifen ab und jede Schätzung reicht darüber
+   * hinaus — drei Blöcke prüfen dann in zwei von drei Fällen genau das. Ist das
+   * Seil erst gut vermessen, wird überwiegend interpoliert, und fünf Blöcke
+   * geben das ehrlicher wieder. */
+  const folds = Math.min(n >= 20 ? 5 : 3, n);
+
+  for (let f = 0; f < folds; f++) {
+    const from = Math.floor((f * n) / folds);
+    const to = Math.floor(((f + 1) * n) / folds);
+    const test = points.slice(from, to);
+    const train = points.slice(0, from).concat(points.slice(to));
+
+    if (train.length < model.minPoints) continue;
     const fitted = model.fit(train);
     if (!fitted) continue;
-    const pred = fitted.predict(points[i].steps);
-    if (!Number.isFinite(pred)) continue;
-    const r = points[i].distance - pred;
-    sse += r * r;
-    absSum += Math.abs(r);
-    count++;
+
+    for (const p of test) {
+      const pred = fitted.predict(p.steps);
+      if (!Number.isFinite(pred)) continue;
+      const r = p.distance - pred;
+      squared.push(r * r);
+      absSum += Math.abs(r);
+    }
   }
 
+  const count = squared.length;
   if (count < model.minPoints) return null;
-  return {
-    rmse: Math.sqrt(sse / count),
-    mae: absSum / count,
-    evaluated: count,
-  };
+
+  const meanSq = squared.reduce((a, b) => a + b, 0) / count;
+  const rmse = Math.sqrt(meanSq);
+
+  /* Wie genau ist dieser Fehlerwert selbst? Bei wenigen Schüssen ist die
+   * Kreuzvalidierung stark verrauscht — dann darf ein knapper Vorsprung keine
+   * kompliziertere Familie küren. Der Standardfehler macht das messbar. */
+  let variance = 0;
+  for (const v of squared) variance += (v - meanSq) ** 2;
+  variance /= Math.max(1, count - 1);
+  const se = rmse > 1e-9 ? Math.sqrt(variance / count) / (2 * rmse) : 0;
+
+  return { rmse, se, mae: absSum / count, evaluated: count };
 }
 
 /* Fittet alle Familien auf dem kompletten Datenstand und kürt die mit dem
- * kleinsten Kreuzvalidierungsfehler. */
-function buildModel(rawPoints) {
+ * kleinsten Kreuzvalidierungsfehler.
+ *
+ * prior ist optional die Referenzkurve aus den übrigen Seilen (siehe
+ * buildReference). Liegt sie vor, treten zusätzlich die Familien an, die diese
+ * Form nur noch verschieben und strecken — die kommen mit zwei bis drei
+ * Schüssen aus. */
+function buildModel(rawPoints, prior) {
   const points = rawPoints
     .filter(
       (p) =>
@@ -266,16 +411,23 @@ function buildModel(rawPoints) {
     best: null,
     fitted: null,
     ready: false,
+    usesPrior: false,
     reason: '',
   };
 
-  if (points.length < 3) {
-    result.reason =
-      'Zu wenig Messwerte für eine Schätzung — mindestens 3 Schüsse nötig.';
+  const minimum = prior ? 2 : 3;
+  if (points.length < minimum) {
+    result.reason = prior
+      ? `Noch ${minimum - points.length} Schuss bis zur ersten Schätzung — die Form der bisherigen Seile ist schon da.`
+      : 'Zu wenig Messwerte für eine Schätzung — mindestens 3 Schüsse nötig.';
     return result;
   }
 
-  for (const model of MODELS) {
+  const families = prior
+    ? MODELS.concat([makePriorModel(prior, false), makePriorModel(prior, true)])
+    : MODELS;
+
+  for (const model of families) {
     if (points.length < model.minPoints) continue;
     const fitted = model.fit(points);
     if (!fitted) continue;
@@ -293,6 +445,7 @@ function buildModel(rawPoints) {
       id: model.id,
       label: model.label,
       description: model.description,
+      fromPrior: model.id.startsWith('prior-'),
       fitted,
       cv,
       residualStd: Math.sqrt(sse / dof),
@@ -309,7 +462,20 @@ function buildModel(rawPoints) {
   const scored = result.candidates.filter((c) => c.cv);
   if (scored.length) {
     scored.sort((a, b) => a.cv.rmse - b.cv.rmse);
-    result.best = scored[0];
+
+    /* Ein-Standardfehler-Regel: unter allen Familien, die statistisch gleichauf
+     * mit der besten liegen, gewinnt die sparsamste. Ohne das kürt die
+     * Kreuzvalidierung bei wenigen Schüssen gern eine freie Kurve, die zufällig
+     * gut durch drei Punkte läuft — und die Schätzung würde mit einem
+     * zusätzlichen Schuss schlechter statt besser. */
+    const leader = scored[0];
+    const grenze = leader.cv.rmse + leader.cv.se;
+    const gleichauf = scored.filter((c) => c.cv.rmse <= grenze);
+    gleichauf.sort(
+      (a, b) => a.fitted.nParams - b.fitted.nParams || a.cv.rmse - b.cv.rmse
+    );
+
+    result.best = gleichauf[0];
   } else {
     result.candidates.sort((a, b) => a.residualStd - b.residualStd);
     result.best = result.candidates[0];
@@ -317,9 +483,23 @@ function buildModel(rawPoints) {
 
   result.fitted = result.best.fitted;
   result.ready = true;
+  result.usesPrior = !!result.best.fromPrior;
   result.uncertainty = result.best.cv
     ? result.best.cv.rmse
     : result.best.residualStd;
+
+  /* Bei wenigen eigenen Schüssen deckt der Messbereich nur einen Ausschnitt ab.
+   * Gesucht wird die Umkehrung deshalb über den Bereich, den auch das Vorwissen
+   * kennt — sonst käme für 20 m keine Antwort, obwohl die Form längst bekannt
+   * ist. */
+  const own = [
+    Math.min(...points.map((p) => p.steps)),
+    Math.max(...points.map((p) => p.steps)),
+  ];
+  result.measuredRange = own;
+  result.searchRange = prior
+    ? [Math.min(own[0], prior.range[0]), Math.max(own[1], prior.range[1])]
+    : own;
 
   result.candidates.sort((a, b) => {
     const av = a.cv ? a.cv.rmse : Infinity;
@@ -340,15 +520,14 @@ function buildModel(rawPoints) {
 function stepsForDistance(model, targetDistance) {
   if (!model.ready || !Number.isFinite(targetDistance)) return null;
 
-  const stepsList = model.points.map((p) => p.steps);
-  const sMin = Math.min(...stepsList);
-  const sMax = Math.max(...stepsList);
-  const span = Math.max(sMax - sMin, 1);
+  const [sMin, sMax] = model.measuredRange;
+  const [rMin, rMax] = model.searchRange;
+  const span = Math.max(rMax - rMin, 1);
 
-  /* Etwas über den gemessenen Bereich hinaus suchen, aber nicht wild
+  /* Etwas über den bekannten Bereich hinaus suchen, aber nicht wild
    * extrapolieren. */
-  const lo = Math.max(0, sMin - span * 0.25);
-  const hi = sMax + span * 0.25;
+  const lo = Math.max(0, rMin - span * 0.25);
+  const hi = rMax + span * 0.25;
 
   const N = 2000;
   const predict = (s) => model.fitted.predict(s);
@@ -409,4 +588,11 @@ function stepsForDistance(model, targetDistance) {
   };
 }
 
-window.RatteModel = { buildModel, stepsForDistance, MODELS };
+/* Referenzkurve aus den Schüssen aller übrigen Seile. Sie liefert die Form,
+ * an der sich ein frisch gebundenes Seil zu Beginn orientiert. */
+function buildReference(points) {
+  if (!points || points.length < 8) return null;
+  return asPrior(buildModel(points));
+}
+
+window.RatteModel = { buildModel, buildReference, stepsForDistance, MODELS };

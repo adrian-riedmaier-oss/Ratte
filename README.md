@@ -25,19 +25,32 @@ Wurfweite bei gleicher Vorspannung. Ein gemeinsamer Fit über alle Seile wäre
 schlicht falsch. Die Konsole rechnet deshalb **pro Seil** und wählt beim Start
 automatisch das aktuellste.
 
-Wie deutlich der Unterschied ist, zeigt der Vorhersagefehler je Seil:
+| Seil | Schüsse | bestes Modell         | Fehler |
+| ---- | ------: | --------------------- | -----: |
+| 1    |      82 | Linear                | 1,24 m |
+| 2    |      15 | Linear                | 0,92 m |
+| 3    |      33 | Potenzgesetz          | 0,78 m |
+| 4    |      28 | Vorwissen, verschoben | 1,01 m |
 
-| Seil | Schüsse | bestes Modell | Fehler |
-| ---- | ------: | ------------- | -----: |
-| 1    |      82 | Quadratisch   | 1,17 m |
-| 2    |      15 | Linear        | 0,95 m |
-| 3    |      33 | Potenzgesetz  | 0,80 m |
-| 4    |      28 | Kubisch       | 0,61 m |
+Wie weit die Seile auseinanderliegen, zeigt sich, wenn man die Kennlinie des
+einen auf die Schüsse des nächsten anwendet:
 
-Seil 3 und Seil 4 standen in den Rohdaten beide unter dem Namen „Seil 3" — die
-Trennmarke in der Quelldatei zeigt aber, dass dazwischen neu gebunden wurde.
-Getrennt gerechnet sinkt der Fehler von 0,74 m auf 0,61 m; sie sind also
-tatsächlich verschiedene Seile.
+| Kennlinie von … auf … | Fehler | systematischer Versatz |
+| --------------------- | -----: | ---------------------: |
+| Seil 1 → Seil 2       | 1,92 m |                −1,37 m |
+| Seil 2 → Seil 3       | 1,47 m |                −0,40 m |
+| Seil 3 → Seil 4       | 0,82 m |                 0,24 m |
+
+Seil 1 und 2 sind also deutlich verschieden — wer die alte Kennlinie
+weiterbenutzt, liegt im Mittel um 1,37 m daneben, und zwar immer in dieselbe
+Richtung.
+
+Seil 3 und Seil 4 standen in den Rohdaten beide unter dem Namen „Seil 3", obwohl
+die Trennmarke in der Quelldatei ein neu gebundenes Seil ausweist. Sie sind
+allerdings ungewöhnlich **ähnlich** gebunden worden: 0,24 m Versatz, gerade
+einmal 92 Steps Verschiebung. Getrennt zu führen ist trotzdem richtig — es
+kostet nichts und entspricht dem, was tatsächlich passiert ist —, aber ein
+großer Sprung wie zwischen Seil 1 und 2 ist es nicht.
 
 ## Datenformat
 
@@ -46,7 +59,7 @@ tatsächlich verschiedene Seile.
 | Spalte      | Bedeutung                                        |
 | ----------- | ------------------------------------------------ |
 | `nr`        | Fortlaufende Schussnummer                        |
-| `seil`      | Welches Seil gespannt war (`Seil 1` … `Seil 4`)   |
+| `seil`      | Welches Seil gespannt war (`Seil 1` … `Seil 4`)  |
 | `zeit`      | Uhrzeit des Schusses, sofern bekannt              |
 | `steps`     | Vorspannung in Schritten des Schrittmotors        |
 | `distanz_m` | Gemessene Flugweite in Metern                     |
@@ -68,11 +81,25 @@ Familien gegeneinander an:
 - **Potenzgesetz** — `d = a·s^b`
 - **Sättigung** — ab einem Punkt bringt mehr Zug kaum noch Weite
 
-Bewertet wird per Leave-One-Out-Kreuzvalidierung: jeder Messpunkt wird einmal
-weggelassen, das Modell auf dem Rest neu gefittet und der weggelassene Punkt
-vorhergesagt. Gewonnen hat die Familie mit dem kleinsten Fehler auf ungesehenen
-Schüssen. Die Rangliste steht in der Konsole, die Auswahl ist also
-nachvollziehbar und nicht geraten.
+Dazu kommen zwei Familien, die nicht frei fitten, sondern die **Kurvenform des
+vorherigen Seils** übernehmen und daran nur verschieben (ein Parameter) und
+strecken (zwei). Sie sind der Grund, warum ein frisch gebundenes Seil sofort
+brauchbar schätzt — dazu unten mehr.
+
+Bewertet wird per Kreuzvalidierung: ein **zusammenhängender Abschnitt** der nach
+Steps sortierten Messreihe wird weggelassen, das Modell auf dem Rest neu
+gefittet und der fehlende Abschnitt vorhergesagt. Der Block ist wichtig. Ein
+einzeln weggelassener Punkt ist von Nachbarn umzingelt und misst nur
+Interpolation — beim Einschießen arbeitet man sich aber von kurz nach weit hoch,
+die Kurve muss also über das Gemessene hinaus tragen. Der erste und der letzte
+Block prüfen genau das.
+
+Bei statistischem Gleichstand gewinnt die sparsamste Familie
+(Ein-Standardfehler-Regel). Ohne diese Regel kürt die Kreuzvalidierung bei
+wenigen Schüssen gern eine freie Kurve, die zufällig gut durch drei Punkte
+läuft — und die Schätzung würde mit einem zusätzlichen Schuss schlechter statt
+besser. Die Rangliste steht in der Konsole, die Auswahl ist also nachvollziehbar
+und nicht geraten.
 
 Der Fit passiert bei jedem Laden neu über den kompletten Datenstand — und nach
 jedem neu eingetragenen Schuss sofort noch einmal. Die Schätzung verbessert sich
@@ -83,6 +110,50 @@ Gefittet wird `Distanz = f(Steps)`, nicht umgekehrt. Das ist die richtige
 Richtung: die Steps stellt der Motor genau ein, die Streuung steckt fast
 vollständig in der gemessenen Weite. Für die praktische Frage („wie viele Steps
 für 12 m?") wird die Kurve anschließend numerisch umgekehrt.
+
+## Ein frisch gebundenes Seil
+
+Nach dem Neubinden gelten die alten Messpunkte nicht mehr — der Sketch verwirft
+sie deshalb mit `c`. Bei null eigenen Schüssen steht man damit aber wieder ganz
+am Anfang.
+
+Das ist unnötig: was sich beim Neubinden ändert, ist vor allem, **ab wann** die
+Schleuder wirft und **wie kräftig** sie ist. Die Form der Kurve bleibt ähnlich.
+Also übernimmt ein neues Seil die Form des vorherigen und passt daran nur ein
+bis zwei Stellgrößen an — das geht mit zwei Schüssen.
+
+Nachgerechnet an allen drei Seilwechseln der Messreihe. Trainiert wird auf den
+ersten n Schüssen des neuen Seils, bewertet auf allen übrigen — also genau der
+Fall „ich habe kurz eingeschossen und will jetzt weiter hinaus":
+
+| eigene Schüsse | Seil 1 → 2 | Seil 2 → 3 | Seil 3 → 4 | ohne Vorwissen |
+| -------------: | ---------: | ---------: | ---------: | -------------- |
+|              2 |     2,88 m |     1,46 m |     0,82 m | keine Schätzung |
+|              3 |     2,67 m |     1,49 m |     0,82 m | keine Schätzung |
+|              4 |     2,08 m |     1,51 m |     0,83 m | keine Schätzung |
+|              5 |     1,27 m |     1,53 m |     0,87 m | keine Schätzung |
+|              8 |     1,38 m |     1,61 m |     0,90 m | 1,38 / 4,60 / 3,64 m |
+
+Der Unterschied zwischen den Spalten ist die Ähnlichkeit der Seile: Seil 3 und 4
+wurden fast gleich gebunden, Seil 1 und 2 nicht. Selbst im ungünstigsten Fall
+liegt man ab dem zweiten Schuss bei knapp 2,9 m und nach fünf Schüssen bei
+1,3 m — statt bis Schuss 6 bis 8 gar keine Schätzung zu haben.
+
+Entscheidend ist dabei weniger die Zahl als die Reichweite: die Schätzung deckt
+ab dem zweiten Schuss sofort den ganzen Bereich von 4 bis 24 m ab, nicht nur die
+zwei bereits geschossenen Weiten.
+
+Wichtig dabei: das Vorwissen kommt vom **zuletzt davor gespannten Seil**, nicht
+aus allen bisherigen zusammen. Zusammengeworfen ergeben verschieden gespannte
+Seile eine verschmierte Durchschnittsform, die zu „linear" entartet — im Test
+2,0 m Fehler statt 0,8 m.
+
+Der Übergang regelt sich von selbst: alle Familien laufen durch dieselbe
+Kreuzvalidierung. Anfangs gewinnt das Vorwissen, sobald genug eigene Schüsse da
+sind, übernehmen die freien Familien. In der Konsole ist jederzeit ablesbar,
+welche gerade führt.
+
+In der Oberfläche startet ein neues Seil über **„+ neu gebunden"**.
 
 ## Anbindung an den Arduino
 

@@ -30,6 +30,9 @@
           <label class="field inline">
             <span>Seil</span>
             <select id="seilSelect"></select>
+            <button id="newSeilBtn" class="btn btn-quiet" type="button">
+              + neu gebunden
+            </button>
           </label>
         </div>
 
@@ -88,10 +91,13 @@
           <span class="hint" id="modelHint"></span>
         </div>
         <p class="note">
-          Fünf Modellfamilien treten bei jedem Laden neu gegeneinander an.
-          Bewertet wird per Leave-One-Out-Kreuzvalidierung: jeder Messpunkt wird
-          einmal weggelassen und dann vorhergesagt. Gewonnen hat die Familie mit
-          dem kleinsten Fehler auf ungesehenen Schüssen.
+          Mehrere Modellfamilien treten bei jedem Laden neu gegeneinander an.
+          Bewertet wird per Kreuzvalidierung: ein zusammenhängender Abschnitt der
+          Messreihe wird weggelassen und dann vorhergesagt. Gewonnen hat die
+          Familie mit dem kleinsten Fehler auf ungesehenen Schüssen; bei
+          statistischem Gleichstand die sparsamste. Solange ein Seil noch wenige
+          Schüsse hat, tritt zusätzlich die Kurvenform des vorherigen Seils an —
+          verschoben und gestreckt.
         </p>
         <div class="table-scroll">
           <table class="data-table" id="modelTable">

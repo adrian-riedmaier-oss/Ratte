@@ -8,6 +8,7 @@ const RAMP_STEPS = 5;
 
 const ui = {
   seil: null,
+  extraSeile: [], // neu gebunden, noch ohne Schuss
   models: new Map(), // Seil -> Modell
   colorOf: new Map(), // Seil -> Farbe
 };
@@ -44,7 +45,7 @@ function log(text) {
  * rutscht die Verteilung mit — die Zuordnung bleibt „je neuer, desto
  * kräftiger", statt an feste Farben gebunden zu sein. */
 function assignColors() {
-  const chronological = RatteData.seilNames().slice().reverse();
+  const chronological = allSeilNames().slice().reverse();
   const n = chronological.length;
   ui.colorOf.clear();
 
@@ -57,13 +58,44 @@ function assignColors() {
   });
 }
 
+/* Seile aus den Daten, plus ein gerade frisch gebundenes, zu dem noch kein
+ * Schuss vorliegt. Neueste zuerst. */
+function allSeilNames() {
+  return ui.extraSeile.concat(RatteData.seilNames());
+}
+
+/* Fortlaufende Nummer weiterzählen, egal wie die Seile heißen. */
+function nextSeilName() {
+  let max = 0;
+  for (const name of allSeilNames()) {
+    const m = /(\d+)\s*$/.exec(name);
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  return `Seil ${max + 1}`;
+}
+
 /* ---------- Modell ---------- */
 
 function rebuild() {
   ui.models.clear();
-  for (const name of RatteData.seilNames()) {
-    ui.models.set(name, RatteModel.buildModel(RatteData.pointsFor(name)));
-  }
+  const names = allSeilNames(); // neueste zuerst
+
+  names.forEach((name, i) => {
+    /* Vorwissen kommt vom zuletzt davor gespannten Seil — einer einzelnen,
+     * zusammenhängenden Kennlinie. Alle Vorseile zusammengeworfen ergäben eine
+     * verschmierte Durchschnittsform, die deutlich schlechter trägt: im Test
+     * lag der Fehler eines frischen Seils damit bei 2,0 m statt bei 0,8 m. */
+    let prior = null;
+    for (let j = i + 1; j < names.length && !prior; j++) {
+      prior = RatteModel.buildReference(RatteData.pointsFor(names[j]));
+    }
+
+    ui.models.set(
+      name,
+      RatteModel.buildModel(RatteData.pointsFor(name), prior)
+    );
+  });
+
   renderAll();
 }
 
@@ -75,7 +107,7 @@ function currentModel() {
 
 function renderSeilSelect() {
   const sel = $('#seilSelect');
-  const names = RatteData.seilNames();
+  const names = allSeilNames();
   sel.textContent = '';
   for (const n of names) {
     const o = document.createElement('option');
@@ -133,7 +165,12 @@ function renderEstimate() {
   const n = model.points.length;
   note.textContent =
     (res.note ? res.note + ' ' : '') +
-    `Modell „${model.best.label}" aus ${n} Schüssen von ${ui.seil}.`;
+    `Modell „${model.best.label}" aus ${n} Schüssen von ${ui.seil}.` +
+    (model.usesPrior
+      ? n < 8
+        ? ' Stützt sich noch auf die Kurvenform des vorherigen Seils — mit jedem Schuss löst es sich davon.'
+        : ' Die Kurvenform des vorherigen Seils sagt hier zuverlässiger vorher als eine frei gefittete.'
+      : '');
 
   setArmEnabled(true);
   ui.pendingSteps = res.steps;
@@ -152,7 +189,7 @@ function setArmEnabled(ok) {
 
 function renderChart() {
   const showAll = $('#showAllSeile').checked;
-  const names = showAll ? RatteData.seilNames() : ui.seil ? [ui.seil] : [];
+  const names = showAll ? allSeilNames() : ui.seil ? [ui.seil] : [];
 
   const series = names.map((n) => ({
     name: n,
@@ -202,6 +239,13 @@ function renderModelTable() {
 
     const name = document.createElement('td');
     name.textContent = c.label + (c === model.best ? '  ✓' : '');
+    if (c.fromPrior) {
+      const tag = document.createElement('span');
+      tag.className = 'row-tag';
+      tag.textContent = 'Vorseil';
+      tag.title = 'Übernimmt die Kurvenform des vorherigen Seils';
+      name.appendChild(tag);
+    }
 
     const rmse = document.createElement('td');
     rmse.className = 'num';
@@ -369,6 +413,28 @@ function wireUI() {
   $('#seilSelect').addEventListener('change', (e) => {
     ui.seil = e.target.value;
     renderAll();
+  });
+
+  /* Neu gebundenes Seil: die alten Messpunkte gelten dann nicht mehr, weil die
+   * Spannung eine andere ist. Statt sie zu verwerfen, bekommt das neue Seil
+   * einen eigenen Eintrag — die Kurvenform des vorherigen dient als Startpunkt,
+   * bis genug eigene Schüsse da sind. */
+  $('#newSeilBtn').addEventListener('click', () => {
+    const name = nextSeilName();
+    if (
+      !confirm(
+        `„${name}" beginnen?\n\n` +
+          'Die bisherigen Seile bleiben erhalten. Die Schätzung startet mit der ' +
+          'Kurvenform des vorherigen Seils und braucht nur zwei bis drei Schüsse, ' +
+          'um sich darauf einzustellen.'
+      )
+    )
+      return;
+
+    ui.extraSeile.unshift(name);
+    ui.seil = name;
+    assignColors();
+    rebuild();
   });
 
   $('#targetInput').addEventListener('input', renderEstimate);
