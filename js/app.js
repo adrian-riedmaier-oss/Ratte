@@ -209,6 +209,7 @@ function renderEstimate() {
     $('#estimateNote').textContent = r.note;
     if (r.warn) box.classList.add('out-of-range');
     ui.testSteps = null;
+    if (ui.mode === 'test') renderPlanned(null);
   } else {
     $('#resultSteps').textContent = fmtNum(r.steps);
     $('#resultLabel').textContent = `Steps  ·  ± ${fmtNum(
@@ -219,6 +220,7 @@ function renderEstimate() {
     $('#estimateNote').textContent =
       (r.note ? r.note + ' ' : '') + modelSuffix(r);
     ui.testSteps = r.steps;
+    if (ui.mode === 'test') renderPlanned(r.steps);
   }
 
   updateActionButtons();
@@ -240,6 +242,7 @@ function renderPruef() {
     $('#pruefNote').textContent = r.note;
     if (r.warn) box.classList.add('out-of-range');
     ui.pruefSteps = null;
+    if (ui.mode === 'pruef') renderPlanned(null);
   } else {
     $('#pruefSteps').textContent = fmtNum(r.steps);
     $('#pruefLabel').textContent = `Steps  ·  ± ${fmtNum(
@@ -253,9 +256,38 @@ function renderPruef() {
       ' Der Winkel dreht nur das Gerät — auf die Vorspannung wirkt er nicht, ' +
       'er wird aber mitgeschrieben.';
     ui.pruefSteps = r.steps;
+    if (ui.mode === 'pruef') renderPlanned(r.steps);
   }
 
   updateActionButtons();
+}
+
+/* Zeigt, wohin die Konsole fahren würde — schon beim Einstellen der Weite,
+ * bevor irgendetwas vorgemerkt oder gefahren ist. */
+function renderPlanned(steps) {
+  const ziel = aktuellesZiel();
+
+  $('#zielHint').textContent = Number.isFinite(ziel)
+    ? `nimmt die Zieldistanz von oben: ${fmtNum(ziel, 1)} m`
+    : 'keine Zieldistanz eingetragen';
+
+  const plan = $('#posPlan');
+  if (steps == null) {
+    $('#livePlanned').textContent = '—';
+    plan.hidden = true;
+    return;
+  }
+
+  $('#livePlanned').textContent = fmtNum(steps);
+
+  const [lo, hi] = ui.posRange || posRange();
+  const anteil = ((steps - lo) / (hi - lo || 1)) * 100;
+  if (anteil < -5 || anteil > 105) {
+    plan.hidden = true;
+  } else {
+    plan.hidden = false;
+    plan.style.left = `calc(${Math.max(0, Math.min(100, anteil))}% - 1px)`;
+  }
 }
 
 function updateActionButtons() {
@@ -278,10 +310,14 @@ function updateActionButtons() {
 /* Balken für die Live-Position. Der Bereich ist das, was mit diesem Seil
  * bisher gefahren wurde — davor und danach ist unbekanntes Gebiet. */
 function posRange() {
+  /* Der Balken zeigt den Bereich, in dem tatsächlich gefahren wurde — nicht
+   * den Suchbereich des Modells. Der reicht zum Extrapolieren über die Daten
+   * hinaus, und der Balken staucht dadurch alles Wesentliche in die Mitte. */
+  const alle = RatteData.pointsFor(null).map((p) => p.steps);
+  if (alle.length) return [Math.min(...alle), Math.max(...alle)];
+
   const model = currentModel();
   if (model && model.ready && model.searchRange) return model.searchRange;
-  const all = RatteData.pointsFor(null).map((p) => p.steps);
-  if (all.length) return [Math.min(...all), Math.max(...all)];
   return [0, 25000];
 }
 
@@ -461,6 +497,8 @@ function setMode(mode) {
   $('#modePruef').classList.toggle('is-on', !test);
   $('#modeTest').setAttribute('aria-selected', String(test));
   $('#modePruef').setAttribute('aria-selected', String(!test));
+
+  renderPlanned(test ? ui.testSteps : ui.pruefSteps);
 
   $('#modeLede').textContent = test
     ? 'Schüsse sammeln und das Modell schärfen. Alles wird gespeichert.'
@@ -804,9 +842,15 @@ function wireUI() {
     });
   }
 
+  /* Meldet die Zielweite aus der Schätzung an den Sketch. Ein eigenes Feld
+   * dafür gab es hier einmal — dieselbe Größe zweimal einzutippen war eine
+   * Fehlerquelle, und beide konnten auseinanderlaufen. */
   $('#zielSetBtn').addEventListener('click', () => {
-    const v = parseFloat($('#zielInput').value);
-    if (!Number.isFinite(v)) return;
+    const v = aktuellesZiel();
+    if (!Number.isFinite(v)) {
+      log('!! keine Zielweite eingetragen');
+      return;
+    }
     send('z' + v);
   });
 

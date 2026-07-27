@@ -123,6 +123,17 @@ danach macht der Feinabgleich den Rest.
 
 ## Der Regelkreis
 
+Die Sollweite steht an **einer** Stelle — in der Schätzung, im Prüfungsmodus als
+„Entfernung zum Ziel". Das Steuerpult hatte dafür einmal ein eigenes Feld;
+dieselbe Größe zweimal einzutippen war eine Fehlerquelle, und beide konnten
+auseinanderlaufen. Der Knopf „Zielweite melden (z)" nimmt jetzt den Wert von
+oben.
+
+Sobald eine Weite eingestellt ist, steht in der Live-Anzeige unter **Geplant**,
+wohin die Konsole fahren würde, mit einer Marke auf dem Positionsbalken — noch
+bevor etwas vorgemerkt oder gefahren ist. Daneben zeigt **Vorgemerkt**, was der
+Arduino bestätigt hat.
+
 Sollweite eintragen, schießen, tatsächliche Weite melden:
 
 1. Der Sketch meldet `>> gespeichert: Pos … -> … m`.

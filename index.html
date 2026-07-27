@@ -62,6 +62,7 @@
             <span>Pos <b id="livePos">—</b></span>
             <span>Ziel <b id="liveTarget">—</b></span>
             <span>Vorgemerkt <b id="liveArmed">—</b></span>
+            <span class="plan">Geplant <b id="livePlanned">—</b></span>
           </div>
         </div>
 
@@ -71,6 +72,7 @@
           aria-label="Position im gemessenen Bereich"
         >
           <div class="pos-fill" id="posFill"></div>
+          <div class="pos-plan" id="posPlan" hidden></div>
           <div class="pos-mark" id="posMark" hidden></div>
         </div>
         <div class="pos-scale">
@@ -183,17 +185,12 @@
           <fieldset class="panel">
             <legend>2 · Kalibrieren (Sequenz 4 → 24 m)</legend>
             <div class="btn-row">
-              <span class="row-label">Ziel z</span>
-              <input
-                id="zielInput"
-                class="narrow"
-                type="number"
-                step="0.1"
-                value="4"
-                inputmode="decimal"
-              />
-              <button id="zielSetBtn" class="btn btn-ok">Ziel setzen</button>
+              <span class="row-label">Ziel</span>
+              <button id="zielSetBtn" class="btn btn-ok">
+                Zielweite melden (z)
+              </button>
               <button class="btn btn-go js-go">GO (g)</button>
+              <span class="hint" id="zielHint"></span>
             </div>
             <div class="btn-row">
               <span class="row-label">Weite w</span>
