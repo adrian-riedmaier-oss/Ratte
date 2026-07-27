@@ -170,7 +170,16 @@ function estimate(target) {
     note: res.note,
     delta: res.delta,
     localShots: res.localShots,
+    spread: res.spread,
   };
+}
+
+/* Die Streuung ist stark weitenabhaengig — unter 8 m liegen zwei Schuesse mit
+ * gleicher Vorspannung typisch 0,4 m auseinander, ueber 20 m sind es 2,7 m.
+ * Deshalb der oertliche Wert, wo er sich bestimmen laesst. */
+function streuungText(r) {
+  const s = Number.isFinite(r.spread) && r.spread > 0 ? r.spread : r.model.uncertainty;
+  return `Steps  ·  hier ± ${fmtNum(s, 1)} m zu erwarten`;
 }
 
 function modelSuffix(r) {
@@ -212,10 +221,7 @@ function renderEstimate() {
     if (ui.mode === 'test') renderPlanned(null);
   } else {
     $('#resultSteps').textContent = fmtNum(r.steps);
-    $('#resultLabel').textContent = `Steps  ·  ± ${fmtNum(
-      r.model.uncertainty,
-      1
-    )} m Streuung`;
+    $('#resultLabel').textContent = streuungText(r);
     if (!r.inRange) box.classList.add('out-of-range');
     $('#estimateNote').textContent =
       (r.note ? r.note + ' ' : '') + modelSuffix(r);
@@ -245,10 +251,7 @@ function renderPruef() {
     if (ui.mode === 'pruef') renderPlanned(null);
   } else {
     $('#pruefSteps').textContent = fmtNum(r.steps);
-    $('#pruefLabel').textContent = `Steps  ·  ± ${fmtNum(
-      r.model.uncertainty,
-      1
-    )} m Streuung`;
+    $('#pruefLabel').textContent = streuungText(r);
     if (!r.inRange) box.classList.add('out-of-range');
     $('#pruefNote').textContent =
       (r.note ? r.note + ' ' : '') +

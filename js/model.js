@@ -509,18 +509,32 @@ function localCorrection(model, zielFormraum) {
 
   let delta = gewichteterMedian(werte);
 
+  /* Wie stark streuen die Schüsse HIER? Das hängt sehr von der Weite ab: unter
+   * 8 m liegen zwei Schüsse mit gleicher Vorspannung typisch 0,4 m
+   * auseinander, über 20 m sind es 2,7 m. Ein einziger Mittelwert über den
+   * ganzen Bereich verschweigt genau das. Gemessen wird als mittlere absolute
+   * Abweichung vom Median, umgerechnet auf Meter. */
+  const abweichungen = werte.map((w) => ({
+    wert: Math.abs(w.wert - delta),
+    gewicht: w.gewicht,
+  }));
+  const streuungSteps = gewichteterMedian(abweichungen) * 1.4826;
+
   /* Gedeckelt auf das, was am Ziel etwa anderthalb Metern entspricht — so
    * bleibt es bei Feinjustierung statt großer Sprünge. */
   const basis = curveInvert(model.curve, zielFormraum);
   if (basis != null) {
-    const steigung = model.slopeAt(basis);
-    if (steigung > 1e-9) {
-      const grenze = TUNING.maxKorrekturM / steigung;
+    const s = model.slopeAt(basis);
+    if (s > 1e-9) {
+      const grenze = TUNING.maxKorrekturM / s;
       delta = Math.max(-grenze, Math.min(grenze, delta));
     }
   }
 
-  return { delta, used: werte.length, window: fenster };
+  const steigung = basis != null ? model.slopeAt(basis) : 0;
+  const spread = steigung > 1e-9 ? streuungSteps * steigung : null;
+
+  return { delta, used: werte.length, window: fenster, spread };
 }
 
 /* ---------- Umkehrung: Distanz -> Steps ---------- */
@@ -561,6 +575,8 @@ function stepsForDistance(model, targetDistance) {
     inRange: !drunter && !drueber,
     delta: Math.round(lokal.delta),
     localShots: lokal.used,
+    /* Zu erwartende Streuung an dieser Weite, aus den Schüssen dort. */
+    spread: lokal.spread,
     note: drueber
       ? `Weiter als je geschossen (bisher höchstens ${dMax.toFixed(1)} m) — extrapoliert.`
       : drunter

@@ -98,6 +98,41 @@ Der typische Fehler bleibt etwa gleich — er liegt ohnehin nahe der Streuung, d
 das Auslösen von Hand erzeugt. Was deutlich besser wird, sind die Ausreißer, und
 darauf kommt es an.
 
+## Wo die Grenze liegt
+
+Nicht in der Rechnung. Vergleicht man Schüsse mit gleicher Vorspannung
+miteinander, streut die Schleuder selbst:
+
+| Weite    | Paare | typischer Unterschied bei gleichen Steps |
+| -------- | ----: | ---------------------------------------: |
+| 0–8 m    |    21 |                                   0,40 m |
+| 8–14 m   |    72 |                                   1,40 m |
+| 14–20 m  |    41 |                                   1,40 m |
+| 20–30 m  |    20 |                                   2,70 m |
+
+Nach Sitzung getrennt, Seil 4:
+
+| Abschnitt                 | typische Streuung |
+| ------------------------- | ----------------: |
+| erste Sitzung (nr 132–159) |            0,60 m |
+| zweite Sitzung (nr 160–189)|            1,20 m |
+
+Der Modellfehler nach dem Einschießen liegt bei rund 1,35 m — also **unter** der
+Wiederholgenauigkeit der Mechanik. Mehr Einschuss-Weiten ändern daran nichts:
+mit drei Weiten kommt dasselbe heraus wie mit acht.
+
+Daraus folgt für die Vorbereitung:
+
+- **Der Auslöser ist der Hebel**, nicht die Software. Zwischen erster und
+  zweiter Sitzung hat sich die Streuung verdoppelt.
+- **Kurze Weiten sind deutlich verlässlicher** als weite — 0,4 m gegen 2,7 m.
+- **Mehrere Schüsse je Einschuss-Weite** helfen, weil sich der Einschussfehler
+  mit der Wurzel der Schusszahl verkleinert: 1,5 m bei einem Schuss, 0,87 m bei
+  dreien. Der Median in der Rechnung nimmt sie ohnehin robust zusammen.
+
+Die Konsole zeigt deshalb nicht mehr einen Durchschnittswert, sondern die an
+**dieser** Weite zu erwartende Streuung — bei 4 m ± 0,9 m, bei 16 m ± 2,1 m.
+
 ## Ein frisch gebundenes Seil
 
 Nach dem Neubinden gelten die alten Messpunkte nicht mehr — der Sketch verwirft
