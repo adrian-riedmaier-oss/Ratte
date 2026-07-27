@@ -136,31 +136,46 @@ Die Konsole zeigt deshalb nicht mehr einen Durchschnittswert, sondern die an
 ### Was heißt das für die Wertung
 
 Gewertet wird nach Abstand zur Zielweite: volle Punkte im Kreis von 1 m
-Durchmesser (also ± 0,50 m), Teilpunkte bei 2 m (± 1,00 m). Simuliert über die
-Messreihe — neues Seil, bei 4/8/12/18/24 m eingeschossen, dann alle übrigen
-Schüsse als Wertungsschüsse gerechnet:
+Durchmesser (also ± 0,50 m), Teilpunkte bei 2 m (± 1,00 m).
 
-| Bereich          | typischer Fehler | volle Punkte | mind. Teilpunkte |
-| ---------------- | ---------------: | -----------: | ---------------: |
-| kurz (bis 8 m)   |           0,27 m |         70 % |             90 % |
-| mittel (8–16 m)  |           1,35 m |         11 % |             31 % |
-| weit (ab 16 m)   |           2,02 m |          9 % |             25 % |
+Simuliert über die **gesamte Messreihe**: jedes Seil einmal als das frisch
+gebundene behandelt, bei 4/8/12/18/24 m eingeschossen, alle übrigen Schüsse als
+Wertungsschüsse gerechnet — 320 Wertungsschüsse aus 188 Messwerten.
 
-Mit dem Auslöser der ersten Sitzung (Streuung 0,60 m statt 1,20 m) steigt das
-auf 34 % volle und 80 % Teilpunkte.
+| Bereich           |   n | typ. Fehler | volle Punkte | mind. Teilpunkte |
+| ----------------- | --: | ----------: | -----------: | ---------------: |
+| sehr kurz (< 6 m) |  28 |      0,73 m |         39 % |             57 % |
+| kurz (6–10 m)     |  58 |      0,50 m |     **50 %** |         **79 %** |
+| mittel (10–16 m)  | 121 |      1,54 m |         13 % |             30 % |
+| weit (16–22 m)    |  81 |      1,32 m |         11 % |             32 % |
+| sehr weit (> 22 m)|  32 |      2,05 m |         13 % |             38 % |
+| **gesamt**        | 320 |      1,24 m |     **22 %** |         **43 %** |
 
-Über vier Wertungsschüsse:
+Je Seil, chronologisch:
 
-| | volle Punkte | Teilpunkte | alle vier leer |
-| --- | ---: | ---: | ---: |
-| Auslöser wie zuletzt | 0,6 von 4 | 1,3 von 4 | 19 % |
-| besserer Auslöser    | 1,4 von 4 | 3,2 von 4 | ~0 % |
+| Seil | Wertungsschüsse | typ. Fehler | volle Punkte |
+| ---- | --------------: | ----------: | -----------: |
+| 1    |             149 |      1,27 m |         26 % |
+| 2    |              18 |      0,88 m |         17 % |
+| 3    |              52 |      0,94 m |         21 % |
+| 4    |             101 |      1,46 m |         16 % |
 
-Ein Probeschuss auf dieselbe Weite hebt die vollen Punkte von 13 % auf 23 %,
-an den Teilpunkten ändert er nichts. Der Grund steht in der Zerlegung des
-Fehlers: bei einer Gesamtstreuung von σ ≈ 2,55 m sind σ ≈ 2,10 m reiner Zufall
-und nur σ ≈ 1,46 m systematisch — **zwei Drittel der Streuung lassen sich durch
-keine Rechnung wegbekommen.**
+Das **älteste** Seil trifft am besten und das jüngste am schlechtesten — passend
+dazu, dass sich die Streuung zwischen den beiden Sitzungen von Seil 4 verdoppelt
+hat. Es ist nicht das Seil, es ist das Auslösen.
+
+Über vier Wertungsschüsse bei gemischten Weiten:
+
+|                       | im Mittel | mindestens einmal | alle vier ohne Punkte |
+| --------------------- | --------: | ----------------: | --------------------: |
+| volle Punkte          | 0,9 von 4 |              62 % |                       |
+| mindestens Teilpunkte | 1,7 von 4 |              89 % |                  11 % |
+
+Ein Probeschuss auf dieselbe Weite hebt die vollen Punkte von 13 % auf 23 %, an
+den Teilpunkten ändert er nichts. Der Grund steht in der Zerlegung des Fehlers:
+bei einer Gesamtstreuung von σ ≈ 2,55 m sind σ ≈ 2,10 m reiner Zufall und nur
+σ ≈ 1,46 m systematisch — **zwei Drittel der Streuung lassen sich durch keine
+Rechnung wegbekommen.**
 
 ## Ein frisch gebundenes Seil
 
