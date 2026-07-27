@@ -17,6 +17,7 @@ const ui = {
   models: new Map(), // Seil -> Modell
   colorOf: new Map(), // Seil -> Farbe
   richtung: 'geradeaus',
+  hasArm: null, // ob der Sketch a<n> kennt (aus der Verbindungsprüfung)
   winkel: 0,
   testSteps: null,
   pruefSteps: null,
@@ -506,6 +507,45 @@ async function runAutoSync() {
   }
 }
 
+/* ---------- Verbindung prüfen ----------
+ *
+ * Ein offener Port beweist nur, dass ein USB-Gerät da ist. Ob am anderen Ende
+ * der Katapult-Sketch läuft — und ob es die Fassung mit a<n> ist —, zeigt erst
+ * seine Antwort. */
+async function runIdentify() {
+  const pill = $('#sketchState');
+  const hint = $('#serialHint');
+
+  setPill(pill, 'prüfe Sketch …', 'pill-quiet');
+  hint.textContent = '';
+  $('#checkBtn').disabled = true;
+
+  try {
+    const r = await RatteSerial.identify();
+    ui.hasArm = r.hasArm;
+
+    if (!r.found) {
+      setPill(pill, 'keine Antwort vom Sketch', 'warn');
+      hint.textContent =
+        r.lines === 0
+          ? 'Der Port ist offen, es kommt aber gar nichts. Ist der serielle Monitor der Arduino-IDE noch offen? Ein Port lässt sich nur von einem Programm gleichzeitig nutzen.'
+          : 'Es kommen Zeilen, aber keine Kennung des Katapult-Sketches. Läuft dort ein anderes Programm?';
+    } else if (!r.hasArm) {
+      setPill(pill, 'Sketch erkannt · ohne a<n>', 'warn');
+      hint.textContent =
+        'Vormerken geht damit nicht — dafür die Fassung aus sketch/ aufspielen. Alles andere funktioniert.';
+    } else {
+      setPill(pill, 'Sketch erkannt · a<n> vorhanden', 'ok');
+      hint.textContent = '';
+    }
+  } catch (e) {
+    setPill(pill, 'Prüfung fehlgeschlagen', 'warn');
+    log('!! ' + e.message);
+  } finally {
+    $('#checkBtn').disabled = false;
+  }
+}
+
 /* ---------- Vormerken und Fahren ---------- */
 
 async function armSteps(steps) {
@@ -559,12 +599,17 @@ function wireSerial() {
   RatteSerial.on('state', ({ connected }) => {
     setPill(
       $('#serialState'),
-      connected ? 'verbunden' : 'getrennt',
+      connected ? 'Port offen' : 'getrennt',
       connected ? 'ok' : 'pill-quiet'
     );
-    $('#connectBtn').disabled = connected;
-    $('#disconnectBtn').disabled = !connected;
+    $('#connectBtn').hidden = connected;
+    $('#checkBtn').hidden = !connected;
+    $('#disconnectBtn').hidden = !connected;
+
     if (!connected) {
+      $('#sketchState').hidden = true;
+      $('#serialHint').textContent = '';
+      ui.hasArm = null;
       $('#livePos').textContent = '—';
       $('#liveTarget').textContent = '—';
       $('#liveArmed').textContent = '—';
@@ -622,16 +667,26 @@ function wireUI() {
     } catch (e) {
       /* Abbruch im Geräte-Dialog ist kein Fehler, den man melden muss. */
       if (!/No port selected|cancelled/i.test(e.message)) alert(e.message);
+      return;
     }
+    /* Ein offener Port heißt noch nicht, dass der richtige Sketch antwortet —
+     * also gleich nachfragen. */
+    runIdentify();
   });
   $('#disconnectBtn').addEventListener('click', () => RatteSerial.disconnect());
   $('#clearLogBtn').addEventListener('click', () => {
     $('#serialLog').textContent = '';
   });
 
+  $('#checkBtn').addEventListener('click', runIdentify);
+
   /* --- Steuerpult: alles, was ein fester Befehl ist --- */
   for (const btn of $$('.js-cmd')) {
-    btn.addEventListener('click', () => send(btn.dataset.cmd));
+    btn.addEventListener('click', () => {
+      const frage = btn.dataset.confirm;
+      if (frage && !confirm(frage)) return;
+      send(btn.dataset.cmd);
+    });
   }
 
   for (const btn of $$('.js-go')) {

@@ -29,6 +29,13 @@ function on(event, fn) {
   (listeners[event] = listeners[event] || []).push(fn);
 }
 
+function off(event, fn) {
+  const l = listeners[event];
+  if (!l) return;
+  const i = l.indexOf(fn);
+  if (i >= 0) l.splice(i, 1);
+}
+
 function emit(event, payload) {
   for (const fn of listeners[event] || []) {
     try {
@@ -52,53 +59,69 @@ function isConnected() {
 const PATTERNS = [
   /* Laufende Positionsmeldung während der Fahrt */
   {
+    event: 'position',
     re: /^Pos:(-?\d+)\s+Ziel:(-?\d+)/,
-    handle: (m) =>
-      emit('position', { pos: +m[1], target: +m[2], moving: true }),
+    parse: (m) => ({ pos: +m[1], target: +m[2], moving: true }),
   },
   {
+    event: 'position',
     re: /Position erreicht:\s*(-?\d+)/,
-    handle: (m) =>
-      emit('position', { pos: +m[1], target: +m[1], moving: false }),
+    parse: (m) => ({ pos: +m[1], target: +m[1], moving: false }),
   },
   /* Der wichtigste Fall: der Sketch hat einen Schuss verbucht. */
   {
+    event: 'shot',
     re: /gespeichert:\s*Pos\s+(-?\d+)\s*->\s*(-?[\d.]+)\s*m/i,
-    handle: (m) => emit('shot', { steps: +m[1], distance: parseFloat(m[2]) }),
+    parse: (m) => ({ steps: +m[1], distance: parseFloat(m[2]) }),
   },
   {
+    event: 'armed',
     re: /VORBEREITET\s*->\s*Position\s+(-?\d+)/,
-    handle: (m) => emit('armed', { pos: +m[1] }),
+    parse: (m) => ({ pos: +m[1] }),
   },
   {
+    event: 'go',
     re: /LOS!\s*fahre auf Position\s*(-?\d+)/,
-    handle: (m) => emit('go', { pos: +m[1] }),
+    parse: (m) => ({ pos: +m[1] }),
   },
   {
+    event: 'estop',
     re: /NOT-STOPP bei Position\s*(-?\d+)/,
-    handle: (m) => emit('estop', { pos: +m[1] }),
+    parse: (m) => ({ pos: +m[1] }),
   },
   {
+    event: 'position',
     re: /NULLPUNKT gesetzt/,
-    handle: () => emit('position', { pos: 0, target: 0, moving: false }),
+    parse: () => ({ pos: 0, target: 0, moving: false }),
   },
   {
+    event: 'unknownCommand',
     re: /^!!\s*unbekannt:\s*(.+)$/,
-    handle: (m) => emit('unknownCommand', { cmd: m[1].trim() }),
+    parse: (m) => ({ cmd: m[1].trim() }),
   },
 ];
 
-function handleLine(line) {
-  const text = line.replace(/\r$/, '');
-  if (!text.trim()) return;
-  emit('line', { text });
+/* Ordnet eine Zeile des Sketches einem Ereignis zu — rein, ohne Nebenwirkung,
+ * damit sich die Zuordnung gegen die echten Ausgaben prüfen lässt. */
+function parseLine(text) {
+  if (!text.trim()) return null;
   for (const p of PATTERNS) {
     const m = text.match(p.re);
-    if (m) {
-      p.handle(m);
-      return;
-    }
+    if (m) return { event: p.event, payload: p.parse(m) };
   }
+  return null;
+}
+
+function handleLine(line) {
+  const text = line.replace(/\r$/, '');
+
+  /* Jede Zeile geht unverändert weiter, auch die leeren: der Monitor in der
+   * Seite soll denselben Text zeigen wie der serielle Monitor der Arduino-IDE,
+   * und der Sketch setzt Leerzeilen bewusst zur Gliederung. */
+  emit('line', { text });
+
+  const hit = parseLine(text);
+  if (hit) emit(hit.event, hit.payload);
 }
 
 /* ---------- Verbindung ---------- */
@@ -180,6 +203,46 @@ async function sendCommand(cmd) {
   await writer.write(new TextEncoder().encode(text + '\n'));
 }
 
+/*
+ * Prüft, ob am anderen Ende tatsächlich der Katapult-Sketch hängt.
+ *
+ * Beim Öffnen des Ports startet der Arduino neu (die Web-Serial-API zieht dabei
+ * dieselben Leitungen wie der serielle Monitor) und gibt von sich aus seine
+ * Hilfe aus. Kommt die nicht — etwa weil der Port schon offen war und kein
+ * Neustart ausgelöst wurde —, wird mit '?' aktiv nachgefragt.
+ *
+ * Aus derselben Antwort lässt sich nebenbei ablesen, ob die erweiterte Fassung
+ * mit a<n> aufgespielt ist. Das geht so ohne Nebenwirkung: a<n> auszuprobieren
+ * würde eine Position vormerken.
+ */
+async function identify() {
+  if (!writer) throw new Error('Nicht verbunden.');
+
+  const seen = [];
+  const collect = ({ text }) => seen.push(text);
+  on('line', collect);
+
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const sawBanner = () => seen.some((l) => /KATAPULT/i.test(l));
+
+  try {
+    await wait(2500); // Neustart nach dem Öffnen abwarten
+    if (!sawBanner()) {
+      await sendCommand('?');
+      await wait(1800);
+    }
+  } finally {
+    off('line', collect);
+  }
+
+  const text = seen.join('\n');
+  return {
+    found: sawBanner(),
+    hasArm: /a<n>/i.test(text),
+    lines: seen.length,
+  };
+}
+
 /* NOT-STOPP. Wirkt sofort, ohne Zeilenende, weil der Sketch das Zeichen
  * direkt beim Lesen auswertet. */
 async function emergencyStop() {
@@ -200,29 +263,22 @@ function armPosition(steps) {
   return new Promise((resolve, reject) => {
     let settled = false;
 
+    const aufraeumen = () => {
+      clearTimeout(timer);
+      off('armed', onArmed);
+      off('unknownCommand', onUnknown);
+    };
+
     const finish = (value) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
-      offArmed();
-      offUnknown();
+      aufraeumen();
       resolve(value);
     };
 
     const onArmed = () => finish(true);
     const onUnknown = ({ cmd }) => {
       if (/^a/i.test(cmd)) finish(false);
-    };
-
-    const offArmed = () => {
-      const l = listeners.armed || [];
-      const i = l.indexOf(onArmed);
-      if (i >= 0) l.splice(i, 1);
-    };
-    const offUnknown = () => {
-      const l = listeners.unknownCommand || [];
-      const i = l.indexOf(onUnknown);
-      if (i >= 0) l.splice(i, 1);
     };
 
     on('armed', onArmed);
@@ -234,9 +290,7 @@ function armPosition(steps) {
     sendCommand('a' + Math.round(steps)).catch((e) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
-      offArmed();
-      offUnknown();
+      aufraeumen();
       reject(e);
     });
   });
@@ -262,6 +316,9 @@ function reportShot(meters) {
 
 window.RatteSerial = {
   on,
+  off,
+  identify,
+  parseLine,
   connect,
   disconnect,
   isSupported,

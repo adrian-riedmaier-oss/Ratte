@@ -161,8 +161,36 @@ Die Konsole verbindet sich per **Web Serial** direkt über USB mit dem Sketch �
 kein Zwischenstück, kein Server. Nötig ist Chrome oder Edge auf einem Rechner;
 Firefox und Safari können Web Serial nicht.
 
+### Verbinden und prüfen
+
+Oben in der Seite: **Arduino verbinden**. Ein offener Port beweist aber nur, dass
+ein USB-Gerät da ist — ob dort auch der Katapult-Sketch läuft, zeigt erst seine
+Antwort. Deshalb fragt die Konsole gleich nach dem Verbinden nach (und über
+**Verbindung prüfen** jederzeit wieder) und meldet eines von drei Ergebnissen:
+
+- **Sketch erkannt · a\<n\> vorhanden** — alles da
+- **Sketch erkannt · ohne a\<n\>** — läuft, aber Vormerken geht nicht; die
+  Fassung aus `sketch/` aufspielen
+- **keine Antwort vom Sketch** — meist ist der serielle Monitor der Arduino-IDE
+  noch offen. Einen Port kann immer nur ein Programm gleichzeitig benutzen.
+
+Geprüft wird über die Hilfeausgabe des Sketches, die er beim Neustart von selbst
+schickt; bleibt sie aus, wird `?` gesendet. Das ist bewusst nebenwirkungsfrei —
+`a<n>` auszuprobieren würde eine Position vormerken.
+
+### Alle Befehle sind abgebildet
+
+Das Steuerpult deckt den vollständigen Befehlssatz des Sketches ab:
+`0 · ? · a · b · c · f · g · k · m · n · p · r · s · t · u · v · w · x · z`.
+Jeder Knopf trägt den Befehl, den er schickt. Ohne Verbindung wird nichts
+gesendet, sondern angezeigt, was gesendet würde.
+
+Der serielle Monitor der Seite gibt die Ausgaben unverändert wieder, Leerzeilen
+eingeschlossen — er zeigt denselben Text wie der Monitor der Arduino-IDE.
+Selbst gesendete Befehle sind mit `>` markiert.
+
 Der Sketch gibt seinen Zustand ohnehin schon vollständig über die serielle
-Schnittstelle aus, gelesen werden daher unter anderem:
+Schnittstelle aus, ausgewertet werden daher unter anderem:
 
 | Ausgabe des Sketches               | Wirkung in der Konsole                 |
 | ---------------------------------- | -------------------------------------- |

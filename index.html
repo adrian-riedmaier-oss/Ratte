@@ -36,6 +36,17 @@
       <p class="lede" id="modeLede">
         Schüsse sammeln und das Modell schärfen. Alles wird gespeichert.
       </p>
+      <div class="conn-bar">
+        <button id="connectBtn" class="btn btn-primary">
+          Arduino verbinden
+        </button>
+        <button id="checkBtn" class="btn" hidden>Verbindung prüfen</button>
+        <button id="disconnectBtn" class="btn" hidden>Trennen</button>
+        <span class="pill pill-quiet" id="serialState">getrennt</span>
+        <span class="pill" id="sketchState" hidden></span>
+        <span class="hint" id="serialHint"></span>
+      </div>
+
       <div class="status-row">
         <span id="dataStatus" class="pill">lade Daten …</span>
         <span id="pendingStatus" class="pill pill-quiet" hidden></span>
@@ -68,11 +79,9 @@
         </div>
 
         <div class="btn-row">
-          <button id="connectBtn" class="btn btn-primary">Verbinden</button>
-          <button id="disconnectBtn" class="btn" disabled>Trennen</button>
           <button class="btn btn-danger js-stop">STOP (s)</button>
-          <span class="pill pill-quiet" id="serialState">getrennt</span>
-          <span class="hint" id="serialHint"></span>
+          <button class="btn js-cmd" data-cmd="0">Nullpunkt (0)</button>
+          <button class="btn js-cmd" data-cmd="r">Reset → 0 (r)</button>
         </div>
       </section>
 
@@ -146,6 +155,12 @@
               <button class="btn js-cmd" data-cmd="f100">100 ►</button>
               <button class="btn js-cmd" data-cmd="f500">500 ►►</button>
             </div>
+            <div class="btn-row">
+              <span class="row-label">Dauerfahrt</span>
+              <button class="btn js-cmd" data-cmd="b">◄ zurück (b)</button>
+              <button class="btn js-cmd" data-cmd="f">vor (f) ►</button>
+              <span class="hint">läuft, bis STOP kommt</span>
+            </div>
           </fieldset>
 
           <fieldset class="panel">
@@ -187,6 +202,9 @@
               <button class="btn js-cmd" data-cmd="p">Punkte (p)</button>
               <button class="btn js-cmd" data-cmd="t">Tabelle (t)</button>
               <button class="btn js-cmd" data-cmd="c">Löschen (c)</button>
+              <button class="btn js-cmd" data-cmd="u">
+                Letzten Punkt zurück (u)
+              </button>
             </div>
             <div class="btn-row">
               <button id="newSeilBtn" class="btn btn-warn">
@@ -217,6 +235,16 @@
                 placeholder="400"
               />
               <button id="spmBtn" class="btn">k senden</button>
+            </div>
+            <div class="btn-row">
+              <button
+                class="btn js-cmd"
+                data-cmd="x"
+                data-confirm="Spulen stromlos schalten?&#10;&#10;Der gespannte Arm kann dabei zurückschnellen, und die gezählte Position stimmt danach nicht mehr."
+              >
+                Spulen stromlos (x)
+              </button>
+              <button class="btn js-cmd" data-cmd="?">Hilfe (?)</button>
             </div>
             <form id="rawForm" class="btn-row">
               <input
