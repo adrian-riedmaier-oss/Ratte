@@ -162,8 +162,6 @@ Fehlers: bei einer Gesamtstreuung von σ ≈ 2,55 m sind σ ≈ 2,10 m reiner Zu
 und nur σ ≈ 1,46 m systematisch — **zwei Drittel der Streuung lassen sich durch
 keine Rechnung wegbekommen.**
 
-Im Prüfungsmodus steht die geschätzte Chance deshalb direkt unter der Step-Zahl.
-
 ## Ein frisch gebundenes Seil
 
 Nach dem Neubinden gelten die alten Messpunkte nicht mehr — der Sketch verwirft

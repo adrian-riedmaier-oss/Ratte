@@ -174,52 +174,6 @@ function estimate(target) {
   };
 }
 
-/* ---------- Trefferchance ----------
- *
- * Prüfungswertung: volle Punkte im Kreis von 1 m Durchmesser um die Zielweite,
- * Teilpunkte bei 2 m Durchmesser — also ±0,50 m und ±1,00 m.
- *
- * Aus der örtlichen Streuung lässt sich abschätzen, wie oft das gelingt. Die
- * Streuung wird dabei als glockenförmig angenommen; das trifft die Messreihe
- * gut genug, taugt aber nur als Größenordnung, nicht als Versprechen.
- */
-
-const WERTUNG_VOLL_M = 0.5;
-const WERTUNG_TEIL_M = 1.0;
-
-/* Fehlerfunktion, Näherung nach Abramowitz-Stegun 7.1.26. */
-function erf(x) {
-  const vorzeichen = x < 0 ? -1 : 1;
-  const t = 1 / (1 + 0.3275911 * Math.abs(x));
-  const y =
-    1 -
-    ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t -
-      0.284496736) *
-      t +
-      0.254829592) *
-      t *
-      Math.exp(-x * x);
-  return vorzeichen * y;
-}
-
-/* Anteil einer Normalverteilung innerhalb von ±radius. */
-function trefferChance(sigma, radius) {
-  if (!(sigma > 0)) return null;
-  return erf(radius / (sigma * Math.SQRT2));
-}
-
-function chanceText(r) {
-  const sigma = Number.isFinite(r.spread) && r.spread > 0 ? r.spread : r.model.uncertainty;
-  const voll = trefferChance(sigma, WERTUNG_VOLL_M);
-  const teil = trefferChance(sigma, WERTUNG_TEIL_M);
-  if (voll == null) return '';
-  return (
-    `Zu erwarten: volle Punkte (± ${fmtNum(WERTUNG_VOLL_M, 1)} m) etwa ` +
-    `${Math.round(voll * 100)} %, Teilpunkte (± ${fmtNum(WERTUNG_TEIL_M, 1)} m) ` +
-    `etwa ${Math.round(teil * 100)} %.`
-  );
-}
-
 /* Die Streuung ist stark weitenabhaengig — unter 8 m liegen zwei Schuesse mit
  * gleicher Vorspannung typisch 0,4 m auseinander, ueber 20 m sind es 2,7 m.
  * Deshalb der oertliche Wert, wo er sich bestimmen laesst. */
@@ -292,7 +246,6 @@ function renderPruef() {
     $('#pruefSteps').textContent = '—';
     $('#pruefLabel').textContent = 'Steps';
     $('#pruefNote').textContent = r.note;
-    $('#pruefChance').textContent = '';
     if (r.warn) box.classList.add('out-of-range');
     ui.pruefSteps = null;
     if (ui.mode === 'pruef') renderPlanned(null);
@@ -300,7 +253,6 @@ function renderPruef() {
     $('#pruefSteps').textContent = fmtNum(r.steps);
     $('#pruefLabel').textContent = streuungText(r);
     if (!r.inRange) box.classList.add('out-of-range');
-    $('#pruefChance').textContent = chanceText(r);
     $('#pruefNote').textContent =
       (r.note ? r.note + ' ' : '') +
       modelSuffix(r) +
