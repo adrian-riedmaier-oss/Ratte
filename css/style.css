@@ -191,6 +191,10 @@ h2 {
   font-size: 0.82rem;
 }
 
+.note a {
+  color: var(--accent);
+}
+
 /* ---------------- Formulare ---------------- */
 
 .field {

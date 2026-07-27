@@ -239,13 +239,26 @@
       <form method="dialog">
         <h2>GitHub-Zugang</h2>
         <p class="note">
-          Zum Zurückschreiben der Messreihe ins Repository. Der Token bleibt
-          ausschließlich in diesem Browser (localStorage) und wird nie
-          weitergegeben. Empfohlen ist ein <em>fine-grained</em> Token, der nur
-          auf dieses eine Repository zeigt und dort genau
-          <em>Contents: read and write</em> darf. Ohne Token funktioniert alles
-          andere weiter — die Schüsse liegen dann lokal und lassen sich als CSV
-          exportieren.
+          Sobald ein Token hinterlegt ist, sichert die Konsole jeden Schuss von
+          selbst ins Repository — kurz verzögert, damit eine schnelle Folge von
+          Schüssen zusammen committet wird.
+        </p>
+        <p class="note">
+          <a
+            href="https://github.com/settings/personal-access-tokens/new"
+            target="_blank"
+            rel="noopener"
+            >Token auf GitHub erzeugen</a
+          >
+          — <em>fine-grained</em>, unter <em>Repository access</em> nur dieses
+          eine Repository, und unter <em>Permissions → Contents</em> auf
+          <em>Read and write</em> stellen. Mehr braucht er nicht.
+        </p>
+        <p class="note">
+          Der Token bleibt ausschließlich in diesem Browser (localStorage) und
+          steht nicht im Seitenquelltext — Besucher der Seite sehen ihn nicht.
+          Ohne Token funktioniert alles andere weiter: die Schüsse liegen dann
+          lokal und lassen sich als CSV exportieren.
         </p>
         <label class="field">
           <span>Repository</span>

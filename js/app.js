@@ -318,9 +318,11 @@ function renderSyncState() {
   }
 
   $('#syncNote').textContent = cfg.token
-    ? `Ziel: ${cfg.repo || '—'} (Branch ${cfg.branch || 'main'})`
-    : 'Kein Token hinterlegt — „Zugang …" öffnen, um direkt ins Repository zu schreiben. ' +
-      'Ohne Token bleiben neue Schüsse in diesem Browser und lassen sich als CSV exportieren.';
+    ? `Sichert automatisch nach jedem Schuss in ${cfg.repo || '—'} ` +
+      `(Branch ${cfg.branch || 'main'}). Der Knopf oben erzwingt es sofort.`
+    : 'Kein Token hinterlegt — „Zugang …" öffnen, dann sichert die Konsole jeden Schuss ' +
+      'von selbst ins Repository. Ohne Token bleiben neue Schüsse in diesem Browser ' +
+      'und lassen sich als CSV exportieren.';
 
   $('#dataHint').textContent = `${RatteData.allRows().length} Schüsse · Quelle: ${RatteData.loadedFrom}`;
 }
@@ -347,6 +349,42 @@ function recordShot({ steps, distance, notiz, ziel }) {
   });
   assignColors();
   rebuild();
+  scheduleAutoSync();
+}
+
+/* ---------- Automatisches Sichern ---------- */
+
+let syncTimer = null;
+
+/* Liegt ein Token vor, wandert jeder Schuss von selbst ins Repository — mit
+ * Verzögerung, damit eine schnelle Folge nicht jeden einzeln committet und
+ * jedes Mal eine Neuveröffentlichung der Seite auslöst.
+ *
+ * Scheitert es, etwa weil auf der Wiese kein Netz ist, bleibt alles lokal
+ * erhalten und der nächste Schuss nimmt es mit. Verloren geht dabei nichts. */
+function scheduleAutoSync() {
+  if (!RatteData.readCfg().token) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(runAutoSync, 15000);
+}
+
+async function runAutoSync() {
+  if (!RatteData.isDirty() || !RatteData.readCfg().token) return;
+
+  setPill($('#pendingStatus'), 'sichere …', 'pill-quiet');
+  try {
+    const r = await RatteData.syncToGitHub();
+    renderAll();
+    if (!RatteData.isDirty()) {
+      setPill($('#pendingStatus'), `gesichert · ${r.count} Schüsse`, 'ok');
+      setTimeout(() => {
+        if (!RatteData.isDirty()) $('#pendingStatus').hidden = true;
+      }, 4000);
+    }
+  } catch (e) {
+    setPill($('#pendingStatus'), 'noch nicht gesichert', 'warn');
+    console.warn('Automatisches Sichern fehlgeschlagen:', e.message);
+  }
 }
 
 /* ---------- Serielle Ereignisse ---------- */
