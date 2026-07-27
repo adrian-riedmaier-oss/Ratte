@@ -260,6 +260,8 @@ async function emergencyStop() {
  * Oberfläche bietet stattdessen die sofortige Fahrt an.
  */
 function armPosition(steps) {
+  const ziel = Math.round(steps);
+
   return new Promise((resolve, reject) => {
     let settled = false;
 
@@ -276,7 +278,13 @@ function armPosition(steps) {
       resolve(value);
     };
 
-    const onArmed = () => finish(true);
+    /* Nur die Bestätigung für GENAU diese Position zählt. Der Sketch merkt
+     * nach einem gemeldeten Schuss von sich aus seine eigene Korrektur vor und
+     * meldet das ebenfalls als "VORBEREITET" — ohne diesen Abgleich hielte man
+     * dessen Meldung für die Antwort auf a<n>. */
+    const onArmed = ({ pos }) => {
+      if (Math.abs(pos - ziel) <= 1) finish(true);
+    };
     const onUnknown = ({ cmd }) => {
       if (/^a/i.test(cmd)) finish(false);
     };
@@ -285,9 +293,9 @@ function armPosition(steps) {
     on('unknownCommand', onUnknown);
 
     /* Bleibt beides aus, ist der Sketch vermutlich zu alt und schweigt. */
-    const timer = setTimeout(() => finish(false), 1500);
+    const timer = setTimeout(() => finish(false), 2000);
 
-    sendCommand('a' + Math.round(steps)).catch((e) => {
+    sendCommand('a' + ziel).catch((e) => {
       if (settled) return;
       settled = true;
       aufraeumen();
@@ -314,11 +322,19 @@ function reportShot(meters) {
   return sendCommand('w' + Number(meters));
 }
 
+/* Speist eine Zeile ein, als wäre sie vom Gerät gekommen. Gedacht zum Prüfen
+ * und zur Fehlersuche: ein mitgeschnittenes Protokoll lässt sich damit noch
+ * einmal durch dieselbe Auswertung schicken, ohne Hardware. */
+function feedLine(text) {
+  handleLine(String(text));
+}
+
 window.RatteSerial = {
   on,
   off,
   identify,
   parseLine,
+  feedLine,
   connect,
   disconnect,
   isSupported,

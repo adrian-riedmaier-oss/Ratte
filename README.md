@@ -111,6 +111,60 @@ Richtung: die Steps stellt der Motor genau ein, die Streuung steckt fast
 vollständig in der gemessenen Weite. Für die praktische Frage („wie viele Steps
 für 12 m?") wird die Kurve anschließend numerisch umgekehrt.
 
+## Der Regelkreis
+
+Sollweite eintragen, schießen, tatsächliche Weite melden — den Rest macht die
+Konsole:
+
+1. Der Sketch meldet `>> gespeichert: Pos … -> … m`.
+2. Der Schuss wandert in die Messreihe und wird gesichert.
+3. Das Modell wird über den kompletten Datenstand neu gerechnet.
+4. Daraus die neue Vorspannung für die Sollweite — und die wird per `a<n>` im
+   Arduino vorgemerkt.
+5. GO drücken.
+
+Der Sketch rechnet nach jedem Schuss auch selbst eine Korrektur, aus einer
+linearen Regression über seine höchstens 40 Punkte im RAM. Die Konsole
+überschreibt diese Vormerkung mit ihrem eigenen Wert und schreibt in den
+Monitor, welcher gilt. Abschalten lässt sich das Nachführen über die Automatik
+in der Karte „Live-Position"; dort steht auch der Schalter, um ohne GO
+loszufahren — der hebt allerdings die Sicherung des Sketches auf und fragt
+deshalb nach.
+
+### Warum es nicht nur am Modell hängt
+
+Das Modell über alle Schüsse ist träge, und das ist meistens richtig: bei rund
+einem Meter Streuung von Schuss zu Schuss darf ein einzelner Ausreißer die Kurve
+nicht verbiegen. Nur gilt das nicht mehr, wenn sich das Seil im Lauf einer
+Sitzung dehnt. Dann liegen die letzten Schüsse systematisch auf einer Seite, und
+das Modell bräuchte Dutzende Schüsse zum Nachziehen — gemessen: nach drei
+Schüssen, die alle 1,5 m zu kurz lagen, bewegte sich die Schätzung um ganze
+29 Steps.
+
+Deshalb sind Form und Höhenlage getrennt. Die Kurvenform kommt aus allen
+Schüssen, die Höhenlage aus den letzten paar: der **Nachlauf** ist der
+gewichtete Mittelwert von gemessen minus vorhergesagt. Ein Ausreißer bewegt ihn
+nur zum Teil und klingt ab, mehrere Schüsse in dieselbe Richtung setzen sich
+durch.
+
+Gewichtet wird doppelt — nach Aktualität und nach **Nähe zum Ziel**. Ein Versatz,
+der bei 24 m gemessen wurde, sagt wenig über einen Schuss auf 12 m; er kann
+genauso gut daher rühren, dass die Kurvenform am weiten Ende leicht
+danebenliegt. Ohne diese zweite Gewichtung sprang die Schätzung um 465 Steps in
+die falsche Richtung. Liegen alle jüngsten Schüsse weit vom Ziel weg, geht der
+Nachlauf gegen null und es bleibt beim reinen Modell.
+
+Mit beidem zusammen, nachgerechnet an drei zu kurzen Schüssen auf ein 12-m-Ziel:
+
+| Schuss             | vorgemerkt danach |
+| ------------------ | ----------------: |
+| —                  |            20.881 |
+| 20.800 → 10,4 m    |            21.294 |
+| 21.150 → 11,6 m    |            21.295 |
+| 21.260 → 12,1 m    |            21.260 |
+
+Nach dem ersten Schuss steht die Korrektur, danach hält sie sich.
+
 ## Ein frisch gebundenes Seil
 
 Nach dem Neubinden gelten die alten Messpunkte nicht mehr — der Sketch verwirft

@@ -83,6 +83,23 @@
           <button class="btn js-cmd" data-cmd="0">Nullpunkt (0)</button>
           <button class="btn js-cmd" data-cmd="r">Reset → 0 (r)</button>
         </div>
+
+        <fieldset class="panel">
+          <legend>Automatik</legend>
+          <label class="field inline checkbox">
+            <input type="checkbox" id="autoFollow" checked />
+            <span>
+              Nach jedem Schuss nachführen — die Konsole rechnet die neue
+              Vorspannung aus allen Schüssen und merkt sie vor
+            </span>
+          </label>
+          <label class="field inline checkbox">
+            <input type="checkbox" id="autoDrive" />
+            <span>
+              dabei ohne GO losfahren — der Motor läuft dann von selbst an
+            </span>
+          </label>
+        </fieldset>
       </section>
 
       <!-- ==================== TESTMODUS ==================== -->

@@ -153,6 +153,70 @@ function renderSeilSelects() {
   }
 }
 
+/* ---------- Nachlauf ----------
+ *
+ * Das Modell über die ganze Messreihe ist träge, und das ist meistens richtig:
+ * bei rund einem Meter Streuung von Schuss zu Schuss darf ein einzelner
+ * Ausreißer die Kurve nicht verbiegen.
+ *
+ * Nur gilt das genau dann nicht mehr, wenn sich das Seil im Lauf einer Sitzung
+ * verändert — es dehnt sich, es wird warm. Dann liegen die letzten Schüsse
+ * systematisch auf einer Seite, und das Modell braucht Dutzende Schüsse, um
+ * nachzuziehen. Der Sketch macht den umgekehrten Fehler: er rechnet die
+ * Korrektur allein aus dem letzten Schuss und schwingt dadurch über.
+ *
+ * Deshalb hier beides getrennt: die Kurvenform kommt aus allen Schüssen, die
+ * Höhenlage aus den letzten paar. Der Nachlauf ist der exponentiell gewichtete
+ * Mittelwert von gemessen minus vorhergesagt. Ein einzelner Ausreißer bewegt
+ * ihn nur zum Teil und klingt wieder ab; mehrere Schüsse in dieselbe Richtung
+ * setzen sich durch.
+ */
+
+const NACHLAUF_SCHUESSE = 8;
+const NACHLAUF_ALPHA = 0.6; // Gewicht je Schuss weiter zurück
+const NACHLAUF_NAEHE_M = 7; // ab welcher Entfernung ein Schuss wenig aussagt
+const NACHLAUF_MAX_M = 2.5; // Sicherheitsgrenze gegen Weglaufen
+
+/* Zusätzlich zur Aktualität zählt die Nähe zum Ziel. Ein Versatz, der bei 24 m
+ * gemessen wurde, sagt wenig über einen Schuss auf 12 m — er kann genauso gut
+ * daher rühren, dass die Kurvenform am weiten Ende leicht danebenliegt. Ohne
+ * diese Gewichtung verschöbe der Nachlauf die Schätzung quer über den ganzen
+ * Bereich; im Test sprang sie dadurch um 465 Steps in die falsche Richtung.
+ *
+ * Liegen alle jüngsten Schüsse weit vom Ziel weg, geht der Nachlauf gegen null
+ * und es bleibt beim reinen Modell — die sichere Voreinstellung. */
+function nachlauf(seil, model, target) {
+  if (!model || !model.ready) return 0;
+
+  const letzte = RatteData.allRows()
+    .filter((r) => r.seil === seil)
+    .slice(-NACHLAUF_SCHUESSE);
+  if (letzte.length < 2) return 0;
+
+  let summe = 0;
+  let gewichte = 0;
+
+  letzte.forEach((r, i) => {
+    const s = parseFloat(r.steps);
+    const d = parseFloat(r.distanz_m);
+    if (!Number.isFinite(s) || !Number.isFinite(d)) return;
+
+    const aktualitaet = Math.pow(NACHLAUF_ALPHA, letzte.length - 1 - i);
+    const naehe = Number.isFinite(target)
+      ? Math.exp(-Math.pow((d - target) / NACHLAUF_NAEHE_M, 2))
+      : 1;
+
+    const g = aktualitaet * naehe;
+    summe += g * (d - model.fitted.predict(s));
+    gewichte += g;
+  });
+
+  /* Zu wenig Gewicht beisammen heißt: nichts Belastbares in der Nähe. */
+  if (gewichte < 0.25) return 0;
+  const b = summe / gewichte;
+  return Math.max(-NACHLAUF_MAX_M, Math.min(NACHLAUF_MAX_M, b));
+}
+
 /* Gemeinsame Rechnung für beide Modi. */
 function estimate(target) {
   const model = currentModel();
@@ -161,14 +225,29 @@ function estimate(target) {
   if (!Number.isFinite(target))
     return { ok: false, note: 'Zieldistanz eingeben.' };
 
-  const res = RatteModel.stepsForDistance(model, target);
-  if (!res || res.steps == null)
-    return { ok: false, note: res ? res.note : 'Keine Lösung gefunden.', warn: true };
+  /* Fliegt es zuletzt weiter als vorhergesagt, muss weniger weit gespannt
+   * werden — also wird die Zielweite um den Nachlauf zurückgenommen. */
+  const b = nachlauf(ui.seil, model, target);
+  const res = RatteModel.stepsForDistance(model, target - b);
 
-  return { ok: true, model, steps: res.steps, inRange: res.inRange, note: res.note };
+  if (!res || res.steps == null)
+    return {
+      ok: false,
+      note: res ? res.note : 'Keine Lösung gefunden.',
+      warn: true,
+    };
+
+  return {
+    ok: true,
+    model,
+    steps: res.steps,
+    inRange: res.inRange,
+    note: res.note,
+    bias: b,
+  };
 }
 
-function modelSuffix(model) {
+function modelSuffix(model, bias) {
   const n = model.points.length;
   return (
     `Modell „${model.best.label}" aus ${n} Schüssen von ${ui.seil}.` +
@@ -176,6 +255,10 @@ function modelSuffix(model) {
       ? n < 8
         ? ' Stützt sich noch auf die Kurvenform des vorherigen Seils — mit jedem Schuss löst es sich davon.'
         : ' Die Kurvenform des vorherigen Seils sagt hier zuverlässiger vorher als eine frei gefittete.'
+      : '') +
+    (Math.abs(bias || 0) >= 0.05
+      ? ` Die letzten Schüsse liegen im Schnitt ${fmtNum(Math.abs(bias), 1)} m ` +
+        `${bias > 0 ? 'weiter' : 'kürzer'} als vorhergesagt — das ist eingerechnet.`
       : '')
   );
 }
@@ -199,7 +282,7 @@ function renderEstimate() {
     )} m Streuung`;
     if (!r.inRange) box.classList.add('out-of-range');
     $('#estimateNote').textContent =
-      (r.note ? r.note + ' ' : '') + modelSuffix(r.model);
+      (r.note ? r.note + ' ' : '') + modelSuffix(r.model, r.bias);
     ui.testSteps = r.steps;
   }
 
@@ -231,7 +314,7 @@ function renderPruef() {
     if (!r.inRange) box.classList.add('out-of-range');
     $('#pruefNote').textContent =
       (r.note ? r.note + ' ' : '') +
-      modelSuffix(r.model) +
+      modelSuffix(r.model, r.bias) +
       ' Der Winkel dreht nur das Gerät — auf die Vorspannung wirkt er nicht, ' +
       'er wird aber mitgeschrieben.';
     ui.pruefSteps = r.steps;
@@ -546,6 +629,75 @@ async function runIdentify() {
   }
 }
 
+/* ---------- Nachführen ----------
+ *
+ * Der Sketch rechnet nach jedem gemeldeten Schuss selbst eine Korrektur:
+ * Fehler mal Schritte-pro-Meter, aus einer linearen Regression über seine
+ * höchstens 40 Punkte im RAM. Die Konsole kann das besser — sie hat die
+ * vollständige Messreihe, rechnet pro Seil, nichtlinear und kreuzvalidiert.
+ *
+ * Deshalb überschreibt sie die Vormerkung des Sketches mit ihrem eigenen Wert.
+ * Weil das zwei "VORBEREITET"-Zeilen hintereinander erzeugt, schreibt sie
+ * zusätzlich in den Monitor, welche davon gilt.
+ */
+
+const ZIELFENSTER_M = 0.3; // dasselbe Fenster, das auch der Sketch verwendet
+
+function aktuellesZiel() {
+  return parseFloat(
+    ui.mode === 'pruef' ? $('#pruefDistanz').value : $('#targetInput').value
+  );
+}
+
+async function nachfuehren(gemessen) {
+  if (!$('#autoFollow').checked || !RatteSerial.isConnected()) return;
+
+  const ziel = aktuellesZiel();
+  if (!Number.isFinite(ziel)) {
+    log('!! Nachführen übersprungen — keine Sollweite eingetragen.');
+    return;
+  }
+
+  /* Der Schuss steckt hier schon im Modell: recordShot hat neu gerechnet. */
+  const r = estimate(ziel);
+  if (!r.ok) {
+    log('!! Nachführen nicht möglich — ' + r.note);
+    return;
+  }
+
+  const abw = gemessen - ziel;
+  const vorzeichen = abw >= 0 ? '+' : '';
+  log(
+    `>> Soll ${fmtNum(ziel, 1)} m, geflogen ${fmtNum(gemessen, 1)} m ` +
+      `(${vorzeichen}${fmtNum(abw, 1)} m)` +
+      (Math.abs(abw) <= ZIELFENSTER_M ? ' — im Zielfenster' : '')
+  );
+  log(
+    `>> Konsole rechnet neu über ${r.model.points.length} Schüsse ` +
+      `(${r.model.best.label}${
+        Math.abs(r.bias || 0) >= 0.05
+          ? `, Nachlauf ${r.bias > 0 ? '+' : '−'}${fmtNum(Math.abs(r.bias), 1)} m`
+          : ''
+      }): ${fmtNum(r.steps)} Steps`
+  );
+
+  if ($('#autoDrive').checked) {
+    try {
+      await RatteSerial.moveTo(r.steps);
+    } catch (e) {
+      log('!! ' + e.message);
+    }
+    return;
+  }
+
+  const ok = await RatteSerial.armPosition(r.steps);
+  log(
+    ok
+      ? `>> ${fmtNum(r.steps)} vorgemerkt — es gilt dieser Wert, nicht die Korrektur des Sketches. Jetzt GO.`
+      : '!! Sketch kennt kein a<n> — es bleibt bei seiner eigenen Korrektur. Für das Nachführen die Fassung aus sketch/ aufspielen.'
+  );
+}
+
 /* ---------- Vormerken und Fahren ---------- */
 
 async function armSteps(steps) {
@@ -643,14 +795,16 @@ function wireSerial() {
 
   /* Der Sketch hat einen Schuss verbucht — direkt übernehmen, samt der
    * gerade eingestellten Ausrichtung. */
-  RatteSerial.on('shot', ({ steps, distance }) => {
+  RatteSerial.on('shot', async ({ steps, distance }) => {
     recordShot({
       steps,
       distance,
+      ziel: aktuellesZiel(),
       winkel: winkelText(),
       notiz: 'automatisch vom Arduino',
     });
     log(`>> übernommen: ${steps} Steps -> ${distance} m (${winkelText()})`);
+    await nachfuehren(distance);
   });
 }
 
@@ -679,6 +833,20 @@ function wireUI() {
   });
 
   $('#checkBtn').addEventListener('click', runIdentify);
+
+  /* Ohne GO losfahren hebt die Sicherung des Sketches auf — das soll niemand
+   * versehentlich anklicken. */
+  $('#autoDrive').addEventListener('change', (e) => {
+    if (!e.target.checked) return;
+    const ok = confirm(
+      'Der Motor läuft danach nach jedem gemeldeten Schuss von selbst an, ' +
+        'ohne GO und ohne Rückfrage.\n\n' +
+        'Der Sketch ist bewusst andersherum gebaut: „DER MOTOR FAEHRT NIE VON ' +
+        'SELBST", damit ihr in Ruhe laden und den Auslöser spannen könnt.\n\n' +
+        'Trotzdem einschalten?'
+    );
+    if (!ok) e.target.checked = false;
+  });
 
   /* --- Steuerpult: alles, was ein fester Befehl ist --- */
   for (const btn of $$('.js-cmd')) {
