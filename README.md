@@ -133,6 +133,37 @@ Daraus folgt für die Vorbereitung:
 Die Konsole zeigt deshalb nicht mehr einen Durchschnittswert, sondern die an
 **dieser** Weite zu erwartende Streuung — bei 4 m ± 0,9 m, bei 16 m ± 2,1 m.
 
+### Was heißt das für die Wertung
+
+Gewertet wird nach Abstand zur Zielweite: volle Punkte im Kreis von 1 m
+Durchmesser (also ± 0,50 m), Teilpunkte bei 2 m (± 1,00 m). Simuliert über die
+Messreihe — neues Seil, bei 4/8/12/18/24 m eingeschossen, dann alle übrigen
+Schüsse als Wertungsschüsse gerechnet:
+
+| Bereich          | typischer Fehler | volle Punkte | mind. Teilpunkte |
+| ---------------- | ---------------: | -----------: | ---------------: |
+| kurz (bis 8 m)   |           0,27 m |         70 % |             90 % |
+| mittel (8–16 m)  |           1,35 m |         11 % |             31 % |
+| weit (ab 16 m)   |           2,02 m |          9 % |             25 % |
+
+Mit dem Auslöser der ersten Sitzung (Streuung 0,60 m statt 1,20 m) steigt das
+auf 34 % volle und 80 % Teilpunkte.
+
+Über vier Wertungsschüsse:
+
+| | volle Punkte | Teilpunkte | alle vier leer |
+| --- | ---: | ---: | ---: |
+| Auslöser wie zuletzt | 0,6 von 4 | 1,3 von 4 | 19 % |
+| besserer Auslöser    | 1,4 von 4 | 3,2 von 4 | ~0 % |
+
+Ein Probeschuss auf dieselbe Weite hebt die vollen Punkte von 13 % auf 23 %,
+an den Teilpunkten ändert er nichts. Der Grund steht in der Zerlegung des
+Fehlers: bei einer Gesamtstreuung von σ ≈ 2,55 m sind σ ≈ 2,10 m reiner Zufall
+und nur σ ≈ 1,46 m systematisch — **zwei Drittel der Streuung lassen sich durch
+keine Rechnung wegbekommen.**
+
+Im Prüfungsmodus steht die geschätzte Chance deshalb direkt unter der Step-Zahl.
+
 ## Ein frisch gebundenes Seil
 
 Nach dem Neubinden gelten die alten Messpunkte nicht mehr — der Sketch verwirft
