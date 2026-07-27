@@ -64,7 +64,7 @@ großer Sprung wie zwischen Seil 1 und 2 ist es nicht.
 | `steps`     | Vorspannung in Schritten des Schrittmotors        |
 | `distanz_m` | Gemessene Flugweite in Metern                     |
 | `ziel_m`    | Angepeilte Weite, sofern gesetzt                  |
-| `winkel`    | Ausrichtung, sofern notiert                       |
+| `winkel`    | Ausrichtung, z. B. `geradeaus` oder `25° links`   |
 | `notiz`     | Freitext                                          |
 
 Die ursprüngliche Exportdatei liegt unverändert als
@@ -192,6 +192,23 @@ Rückfrage, weil der Motor dabei ohne GO losläuft.
 sofort als NOT-STOPP und verwirft den Eingabepuffer. Ein Befehl darf deshalb
 niemals ein `s` enthalten. Alle Befehle des Sketches erfüllen das; `sendCommand`
 prüft es zusätzlich ab, damit es beim Erweitern nicht versehentlich kaputtgeht.
+
+## Zwei Betriebsarten
+
+**Testmodus** — zum Sammeln. Volles Steuerpult für den Sketch, Diagramm,
+Modellrangliste, Datentabelle. Jeder Knopf schickt genau den Befehl, der
+danebensteht; ohne Verbindung zeigt die Konsole nur an, was sie geschickt
+hätte, sodass sich alles gefahrlos durchprobieren lässt.
+
+**Prüfungsmodus** — zum Treffen. Nur noch Entfernung und Ausrichtung: Richtung
+(links, geradeaus, rechts) und Winkel in Fünferschritten von 5 bis 45 Grad.
+Daraus die Vorspannung, vormerken, GO. Kein Diagramm, keine Tabellen.
+
+Der Winkel dreht nur das Gerät — auf die nötige Vorspannung wirkt er nicht, für
+die zählt allein die Entfernung zum Ziel. Mitgeschrieben wird er trotzdem in der
+Spalte `winkel`, damit sich später nachprüfen lässt, ob doch ein Zusammenhang
+besteht. Ein Ergebnis lässt sich auch im Prüfungsmodus festhalten und fließt
+sofort ins Modell.
 
 ## Wo die Daten bleiben
 

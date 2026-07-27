@@ -3,14 +3,24 @@
 /* Verdrahtung: Daten laden, Modell rechnen, Oberfläche aktualisieren. */
 
 const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
 const RAMP_STEPS = 5;
 
+/* Winkel der Prüfung: 5 bis 45 Grad in Fünferschritten, nach links oder rechts. */
+const WINKEL_STUFEN = [5, 10, 15, 20, 25, 30, 35, 40, 45];
+
 const ui = {
+  mode: 'test',
   seil: null,
   extraSeile: [], // neu gebunden, noch ohne Schuss
   models: new Map(), // Seil -> Modell
   colorOf: new Map(), // Seil -> Farbe
+  richtung: 'geradeaus',
+  winkel: 0,
+  testSteps: null,
+  pruefSteps: null,
+  posRange: null,
 };
 
 /* ---------- Hilfen ---------- */
@@ -37,13 +47,28 @@ function log(text) {
   box.scrollTop = box.scrollHeight;
 }
 
+/* Ein Befehl geht nur bei bestehender Verbindung hinaus. Ohne Verbindung zeigt
+ * die Konsole, was sie geschickt hätte — so lässt sich das Pult gefahrlos
+ * durchprobieren, bevor der Motor daran hängt. */
+async function send(cmd) {
+  if (!RatteSerial.isConnected()) {
+    log(`(nicht verbunden) würde senden: ${cmd}`);
+    return false;
+  }
+  try {
+    await RatteSerial.sendCommand(cmd);
+    return true;
+  } catch (e) {
+    log('!! ' + e.message);
+    return false;
+  }
+}
+
 /* Farbe hängt am Seil, nicht an seiner Position in der aktuellen Auswahl —
  * ein Filter darf die verbleibenden Seile nicht umfärben.
  *
  * Die Seile werden in ihrer zeitlichen Reihenfolge über die Rampe verteilt,
- * das älteste am hellen Ende, das aktuelle am dunklen. Kommen Seile dazu,
- * rutscht die Verteilung mit — die Zuordnung bleibt „je neuer, desto
- * kräftiger", statt an feste Farben gebunden zu sein. */
+ * das älteste am hellen Ende, das aktuelle am dunklen. */
 function assignColors() {
   const chronological = allSeilNames().slice().reverse();
   const n = chronological.length;
@@ -51,10 +76,11 @@ function assignColors() {
 
   chronological.forEach((name, i) => {
     const slot =
-      n <= 1
-        ? RAMP_STEPS
-        : Math.round((i * (RAMP_STEPS - 1)) / (n - 1)) + 1;
-    ui.colorOf.set(name, `var(--ramp-${Math.min(RAMP_STEPS, Math.max(1, slot))})`);
+      n <= 1 ? RAMP_STEPS : Math.round((i * (RAMP_STEPS - 1)) / (n - 1)) + 1;
+    ui.colorOf.set(
+      name,
+      `var(--ramp-${Math.min(RAMP_STEPS, Math.max(1, slot))})`
+    );
   });
 }
 
@@ -64,7 +90,6 @@ function allSeilNames() {
   return ui.extraSeile.concat(RatteData.seilNames());
 }
 
-/* Fortlaufende Nummer weiterzählen, egal wie die Seile heißen. */
 function nextSeilName() {
   let max = 0;
   for (const name of allSeilNames()) {
@@ -72,6 +97,12 @@ function nextSeilName() {
     if (m) max = Math.max(max, parseInt(m[1], 10));
   }
   return `Seil ${max + 1}`;
+}
+
+function winkelText() {
+  return ui.richtung === 'geradeaus'
+    ? 'geradeaus'
+    : `${ui.winkel}° ${ui.richtung}`;
 }
 
 /* ---------- Modell ---------- */
@@ -105,86 +136,156 @@ function currentModel() {
 
 /* ---------- Darstellung ---------- */
 
-function renderSeilSelect() {
-  const sel = $('#seilSelect');
+function renderSeilSelects() {
   const names = allSeilNames();
-  sel.textContent = '';
-  for (const n of names) {
-    const o = document.createElement('option');
-    o.value = n;
-    o.textContent = n;
-    sel.appendChild(o);
-  }
   if (!ui.seil || !names.includes(ui.seil)) ui.seil = names[0] || null;
-  sel.value = ui.seil || '';
+
+  for (const sel of [$('#seilSelect'), $('#pruefSeil')]) {
+    sel.textContent = '';
+    for (const n of names) {
+      const o = document.createElement('option');
+      o.value = n;
+      o.textContent = n;
+      sel.appendChild(o);
+    }
+    sel.value = ui.seil || '';
+  }
 }
 
-function renderEstimate() {
+/* Gemeinsame Rechnung für beide Modi. */
+function estimate(target) {
   const model = currentModel();
-  const target = parseFloat($('#targetInput').value);
-  const box = $('#resultBox');
-  const note = $('#estimateNote');
-
-  box.classList.remove('out-of-range');
-
-  if (!model || !model.ready) {
-    $('#resultSteps').textContent = '—';
-    $('#resultLabel').textContent = 'Steps';
-    note.textContent = model ? model.reason : 'Kein Seil ausgewählt.';
-    setArmEnabled(false);
-    return;
-  }
-
-  if (!Number.isFinite(target)) {
-    $('#resultSteps').textContent = '—';
-    $('#resultLabel').textContent = 'Steps';
-    note.textContent = 'Zieldistanz eingeben.';
-    setArmEnabled(false);
-    return;
-  }
+  if (!model) return { ok: false, note: 'Kein Seil ausgewählt.' };
+  if (!model.ready) return { ok: false, note: model.reason };
+  if (!Number.isFinite(target))
+    return { ok: false, note: 'Zieldistanz eingeben.' };
 
   const res = RatteModel.stepsForDistance(model, target);
+  if (!res || res.steps == null)
+    return { ok: false, note: res ? res.note : 'Keine Lösung gefunden.', warn: true };
 
-  if (!res || res.steps == null) {
-    $('#resultSteps').textContent = '—';
-    $('#resultLabel').textContent = 'Steps';
-    box.classList.add('out-of-range');
-    note.textContent = res ? res.note : 'Keine Lösung gefunden.';
-    setArmEnabled(false);
-    return;
-  }
+  return { ok: true, model, steps: res.steps, inRange: res.inRange, note: res.note };
+}
 
-  $('#resultSteps').textContent = fmtNum(res.steps);
-  $('#resultLabel').textContent = `Steps  ·  ± ${fmtNum(
-    model.uncertainty,
-    1
-  )} m Streuung`;
-
-  if (!res.inRange) box.classList.add('out-of-range');
-
+function modelSuffix(model) {
   const n = model.points.length;
-  note.textContent =
-    (res.note ? res.note + ' ' : '') +
+  return (
     `Modell „${model.best.label}" aus ${n} Schüssen von ${ui.seil}.` +
     (model.usesPrior
       ? n < 8
         ? ' Stützt sich noch auf die Kurvenform des vorherigen Seils — mit jedem Schuss löst es sich davon.'
         : ' Die Kurvenform des vorherigen Seils sagt hier zuverlässiger vorher als eine frei gefittete.'
-      : '');
-
-  setArmEnabled(true);
-  ui.pendingSteps = res.steps;
+      : '')
+  );
 }
 
-function setArmEnabled(ok) {
+function renderEstimate() {
+  const r = estimate(parseFloat($('#targetInput').value));
+  const box = $('#resultBox');
+  box.classList.remove('out-of-range');
+
+  if (!r.ok) {
+    $('#resultSteps').textContent = '—';
+    $('#resultLabel').textContent = 'Steps';
+    $('#estimateNote').textContent = r.note;
+    if (r.warn) box.classList.add('out-of-range');
+    ui.testSteps = null;
+  } else {
+    $('#resultSteps').textContent = fmtNum(r.steps);
+    $('#resultLabel').textContent = `Steps  ·  ± ${fmtNum(
+      r.model.uncertainty,
+      1
+    )} m Streuung`;
+    if (!r.inRange) box.classList.add('out-of-range');
+    $('#estimateNote').textContent =
+      (r.note ? r.note + ' ' : '') + modelSuffix(r.model);
+    ui.testSteps = r.steps;
+  }
+
+  updateActionButtons();
+}
+
+function renderPruef() {
+  const r = estimate(parseFloat($('#pruefDistanz').value));
+  const box = $('#pruefBox');
+  box.classList.remove('out-of-range');
+
+  $('#aimSummary').textContent =
+    ui.richtung === 'geradeaus'
+      ? 'Gerät geradeaus ausrichten'
+      : `Gerät ${ui.winkel}° nach ${ui.richtung} drehen`;
+
+  if (!r.ok) {
+    $('#pruefSteps').textContent = '—';
+    $('#pruefLabel').textContent = 'Steps';
+    $('#pruefNote').textContent = r.note;
+    if (r.warn) box.classList.add('out-of-range');
+    ui.pruefSteps = null;
+  } else {
+    $('#pruefSteps').textContent = fmtNum(r.steps);
+    $('#pruefLabel').textContent = `Steps  ·  ± ${fmtNum(
+      r.model.uncertainty,
+      1
+    )} m Streuung`;
+    if (!r.inRange) box.classList.add('out-of-range');
+    $('#pruefNote').textContent =
+      (r.note ? r.note + ' ' : '') +
+      modelSuffix(r.model) +
+      ' Der Winkel dreht nur das Gerät — auf die Vorspannung wirkt er nicht, ' +
+      'er wird aber mitgeschrieben.';
+    ui.pruefSteps = r.steps;
+  }
+
+  updateActionButtons();
+}
+
+function updateActionButtons() {
   const connected = RatteSerial.isConnected();
-  $('#armBtn').disabled = !(ok && connected);
-  $('#goNowBtn').disabled = !(ok && connected);
+
+  $('#armBtn').disabled = !(connected && ui.testSteps != null);
+  $('#goNowBtn').disabled = !(connected && ui.testSteps != null);
+  $('#pruefArm').disabled = !(connected && ui.pruefSteps != null);
+
+  /* GO und STOP bleiben immer bedienbar — sie gehören zum Steuerpult und
+   * zeigen ohne Verbindung an, was sie geschickt hätten. */
+
   $('#armHint').textContent = connected
-    ? ok
+    ? ui.testSteps != null
       ? ''
       : 'keine gültige Schätzung'
     : 'Arduino nicht verbunden';
+}
+
+/* Balken für die Live-Position. Der Bereich ist das, was mit diesem Seil
+ * bisher gefahren wurde — davor und danach ist unbekanntes Gebiet. */
+function posRange() {
+  const model = currentModel();
+  if (model && model.ready && model.searchRange) return model.searchRange;
+  const all = RatteData.pointsFor(null).map((p) => p.steps);
+  if (all.length) return [Math.min(...all), Math.max(...all)];
+  return [0, 25000];
+}
+
+function renderPosScale() {
+  ui.posRange = posRange();
+  $('#posMin').textContent = fmtNum(ui.posRange[0]);
+  $('#posMax').textContent = fmtNum(ui.posRange[1]);
+}
+
+function updatePosBar(pos, target) {
+  const [lo, hi] = ui.posRange || posRange();
+  const span = hi - lo || 1;
+  const pct = (v) => Math.max(0, Math.min(100, ((v - lo) / span) * 100));
+
+  if (Number.isFinite(pos)) $('#posFill').style.width = pct(pos) + '%';
+
+  const mark = $('#posMark');
+  if (Number.isFinite(target) && target !== pos) {
+    mark.hidden = false;
+    mark.style.left = `calc(${pct(target)}% - 1px)`;
+  } else {
+    mark.hidden = true;
+  }
 }
 
 function renderChart() {
@@ -268,20 +369,18 @@ function renderShotsTable() {
   const body = $('#shotsTable tbody');
   body.textContent = '';
 
-  const rows = RatteData.allRows().slice().reverse();
-  for (const r of rows) {
+  for (const r of RatteData.allRows().slice().reverse()) {
     const tr = document.createElement('tr');
 
-    const cells = [
+    for (const [text, cls] of [
       [r.nr, 'num'],
       [r.seil, ''],
       [fmtNum(parseFloat(r.steps)), 'num'],
       [fmtNum(parseFloat(r.distanz_m), 1) + ' m', 'num'],
+      [r.winkel || '—', ''],
       [r.zeit || '—', ''],
       [r.notiz || '', ''],
-    ];
-
-    for (const [text, cls] of cells) {
+    ]) {
       const td = document.createElement('td');
       td.className = cls;
       td.textContent = text;
@@ -298,6 +397,7 @@ function renderShotsTable() {
       RatteData.removeShot(r);
       assignColors();
       rebuild();
+      scheduleAutoSync();
     });
     act.appendChild(del);
     tr.appendChild(act);
@@ -307,44 +407,63 @@ function renderShotsTable() {
 }
 
 function renderSyncState() {
-  const dirty = RatteData.isDirty();
   const cfg = RatteData.readCfg();
-  const pending = $('#pendingStatus');
 
-  if (dirty) {
-    setPill(pending, 'lokale Änderungen nicht gesichert', 'warn');
+  if (RatteData.isDirty()) {
+    setPill($('#pendingStatus'), 'lokale Änderungen nicht gesichert', 'warn');
   } else {
-    pending.hidden = true;
+    $('#pendingStatus').hidden = true;
   }
 
   $('#syncNote').textContent = cfg.token
     ? `Sichert automatisch nach jedem Schuss in ${cfg.repo || '—'} ` +
-      `(Branch ${cfg.branch || 'main'}). Der Knopf oben erzwingt es sofort.`
-    : 'Kein Token hinterlegt — „Zugang …" öffnen, dann sichert die Konsole jeden Schuss ' +
-      'von selbst ins Repository. Ohne Token bleiben neue Schüsse in diesem Browser ' +
-      'und lassen sich als CSV exportieren.';
+      `(Branch ${cfg.branch || 'main'}). Der Knopf erzwingt es sofort.`
+    : 'Kein Token hinterlegt — „Zugang …" öffnen, dann sichert die Konsole jeden ' +
+      'Schuss von selbst ins Repository. Ohne Token bleiben neue Schüsse in diesem ' +
+      'Browser und lassen sich als CSV exportieren.';
 
-  $('#dataHint').textContent = `${RatteData.allRows().length} Schüsse · Quelle: ${RatteData.loadedFrom}`;
+  $('#dataHint').textContent =
+    `${RatteData.allRows().length} Schüsse · Quelle: ${RatteData.loadedFrom}`;
 }
 
 function renderAll() {
-  renderSeilSelect();
+  renderSeilSelects();
+  renderPosScale();
   renderEstimate();
+  renderPruef();
   renderChart();
   renderModelTable();
   renderShotsTable();
   renderSyncState();
 }
 
+/* ---------- Betriebsart ---------- */
+
+function setMode(mode) {
+  ui.mode = mode;
+  const test = mode === 'test';
+
+  $('#viewTest').hidden = !test;
+  $('#viewPruef').hidden = test;
+  $('#modeTest').classList.toggle('is-on', test);
+  $('#modePruef').classList.toggle('is-on', !test);
+  $('#modeTest').setAttribute('aria-selected', String(test));
+  $('#modePruef').setAttribute('aria-selected', String(!test));
+
+  $('#modeLede').textContent = test
+    ? 'Schüsse sammeln und das Modell schärfen. Alles wird gespeichert.'
+    : 'Nur Entfernung und Winkel vorgeben — die Vorspannung rechnet die Konsole.';
+}
+
 /* ---------- Schüsse eintragen ---------- */
 
-function recordShot({ steps, distance, notiz, ziel }) {
+function recordShot({ steps, distance, notiz, ziel, winkel }) {
   RatteData.addShot({
     seil: ui.seil,
     steps,
     distanz_m: distance,
     ziel_m: ziel,
-    winkel: '',
+    winkel: winkel || '',
     notiz: notiz || '',
   });
   assignColors();
@@ -387,29 +506,70 @@ async function runAutoSync() {
   }
 }
 
+/* ---------- Vormerken und Fahren ---------- */
+
+async function armSteps(steps) {
+  if (steps == null) return;
+  try {
+    const ok = await RatteSerial.armPosition(steps);
+    if (ok) {
+      log(`>> ${steps} vorgemerkt — Fahrt erst nach GO (g oder Taster D4)`);
+    } else {
+      log('!! Sketch kennt kein a<n> — bitte die erweiterte Fassung aufspielen');
+      if (
+        confirm(
+          'Der Sketch kennt den Befehl a<n> zum Vormerken noch nicht.\n\n' +
+            'Stattdessen sofort auf die Position fahren? Der Motor läuft dann ' +
+            'ohne GO-Bestätigung los.'
+        )
+      ) {
+        await RatteSerial.moveTo(steps);
+      }
+    }
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function moveNow(steps) {
+  if (steps == null) return;
+  if (
+    !confirm(
+      `Der Motor fährt sofort auf Position ${fmtNum(steps)} — ohne GO-Bestätigung.\n\n` +
+        'Ist alles frei und niemand im Weg?'
+    )
+  )
+    return;
+  try {
+    await RatteSerial.moveTo(steps);
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
 /* ---------- Serielle Ereignisse ---------- */
 
 function wireSerial() {
   if (!RatteSerial.isSupported()) {
-    $('#serialIntro').textContent =
-      'Dieser Browser kann kein Web Serial. Für die Direktverbindung Chrome oder Edge ' +
-      'auf einem Rechner verwenden — Schüsse lassen sich aber jederzeit von Hand eintragen.';
+    $('#serialHint').textContent =
+      'Dieser Browser kann kein Web Serial — dafür Chrome oder Edge auf einem Rechner verwenden.';
     $('#connectBtn').disabled = true;
   }
 
   RatteSerial.on('state', ({ connected }) => {
-    setPill($('#serialState'), connected ? 'verbunden' : 'getrennt', connected ? 'ok' : '');
+    setPill(
+      $('#serialState'),
+      connected ? 'verbunden' : 'getrennt',
+      connected ? 'ok' : 'pill-quiet'
+    );
     $('#connectBtn').disabled = connected;
     $('#disconnectBtn').disabled = !connected;
-    $('#zeroBtn').disabled = !connected;
-    $('#stopBtn').disabled = !connected;
-    $('#rawSend').disabled = !connected;
     if (!connected) {
       $('#livePos').textContent = '—';
       $('#liveTarget').textContent = '—';
       $('#liveArmed').textContent = '—';
     }
-    renderEstimate();
+    updateActionButtons();
   });
 
   RatteSerial.on('line', ({ text }) => log(text));
@@ -419,10 +579,12 @@ function wireSerial() {
   RatteSerial.on('position', ({ pos, target }) => {
     $('#livePos').textContent = fmtNum(pos);
     $('#liveTarget').textContent = fmtNum(target);
+    updatePosBar(pos, target);
   });
 
   RatteSerial.on('armed', ({ pos }) => {
     $('#liveArmed').textContent = fmtNum(pos);
+    updatePosBar(NaN, pos);
   });
 
   RatteSerial.on('go', () => {
@@ -434,61 +596,26 @@ function wireSerial() {
     log(`!! NOT-STOPP bei ${pos}`);
   });
 
-  /* Der Sketch hat einen Schuss verbucht — direkt übernehmen. */
+  /* Der Sketch hat einen Schuss verbucht — direkt übernehmen, samt der
+   * gerade eingestellten Ausrichtung. */
   RatteSerial.on('shot', ({ steps, distance }) => {
     recordShot({
       steps,
       distance,
+      winkel: winkelText(),
       notiz: 'automatisch vom Arduino',
     });
-    log(`>> übernommen: ${steps} Steps -> ${distance} m`);
+    log(`>> übernommen: ${steps} Steps -> ${distance} m (${winkelText()})`);
   });
 }
 
 /* ---------- Ereignisse der Oberfläche ---------- */
 
 function wireUI() {
-  $('#seilSelect').addEventListener('change', (e) => {
-    ui.seil = e.target.value;
-    renderAll();
-  });
+  $('#modeTest').addEventListener('click', () => setMode('test'));
+  $('#modePruef').addEventListener('click', () => setMode('pruef'));
 
-  /* Neu gebundenes Seil: die alten Messpunkte gelten dann nicht mehr, weil die
-   * Spannung eine andere ist. Statt sie zu verwerfen, bekommt das neue Seil
-   * einen eigenen Eintrag — die Kurvenform des vorherigen dient als Startpunkt,
-   * bis genug eigene Schüsse da sind. */
-  $('#newSeilBtn').addEventListener('click', () => {
-    const name = nextSeilName();
-    if (
-      !confirm(
-        `„${name}" beginnen?\n\n` +
-          'Die bisherigen Seile bleiben erhalten. Die Schätzung startet mit der ' +
-          'Kurvenform des vorherigen Seils und braucht nur zwei bis drei Schüsse, ' +
-          'um sich darauf einzustellen.'
-      )
-    )
-      return;
-
-    ui.extraSeile.unshift(name);
-    ui.seil = name;
-    assignColors();
-    rebuild();
-  });
-
-  $('#targetInput').addEventListener('input', renderEstimate);
-  $('#showAllSeile').addEventListener('change', renderChart);
-
-  $('#shotForm').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const steps = parseFloat($('#shotSteps').value);
-    const distance = parseFloat($('#shotDistance').value);
-    if (!Number.isFinite(steps) || !Number.isFinite(distance)) return;
-    recordShot({ steps, distance, notiz: $('#shotNote').value });
-    $('#shotSteps').value = '';
-    $('#shotDistance').value = '';
-    $('#shotNote').value = '';
-  });
-
+  /* --- Verbindung --- */
   $('#connectBtn').addEventListener('click', async () => {
     try {
       await RatteSerial.connect();
@@ -497,60 +624,172 @@ function wireUI() {
       if (!/No port selected|cancelled/i.test(e.message)) alert(e.message);
     }
   });
-
   $('#disconnectBtn').addEventListener('click', () => RatteSerial.disconnect());
-  $('#zeroBtn').addEventListener('click', () => RatteSerial.setZero());
-  $('#stopBtn').addEventListener('click', () => RatteSerial.emergencyStop());
+  $('#clearLogBtn').addEventListener('click', () => {
+    $('#serialLog').textContent = '';
+  });
 
-  $('#armBtn').addEventListener('click', async () => {
-    const steps = ui.pendingSteps;
-    if (steps == null) return;
-    try {
-      const ok = await RatteSerial.armPosition(steps);
-      if (ok) {
-        log(`>> ${steps} vorgemerkt — Fahrt erst nach GO (g oder Taster D4)`);
-      } else {
-        log('!! Sketch kennt kein a<n> — bitte die erweiterte Fassung aufspielen');
-        alert(
-          'Der Sketch auf dem Arduino kennt den Befehl a<n> zum Vormerken noch nicht.\n\n' +
-            'Entweder die erweiterte Fassung aus sketch/ aufspielen, oder ' +
-            '„Sofort fahren" verwenden — dabei läuft der Motor allerdings ohne GO los.'
-        );
+  /* --- Steuerpult: alles, was ein fester Befehl ist --- */
+  for (const btn of $$('.js-cmd')) {
+    btn.addEventListener('click', () => send(btn.dataset.cmd));
+  }
+
+  for (const btn of $$('.js-go')) {
+    btn.addEventListener('click', () => send('g'));
+  }
+
+  for (const btn of $$('.js-stop')) {
+    btn.addEventListener('click', async () => {
+      if (!RatteSerial.isConnected()) {
+        log('(nicht verbunden) würde senden: s');
+        return;
       }
-    } catch (e) {
-      alert(e.message);
-    }
+      try {
+        await RatteSerial.emergencyStop();
+      } catch (e) {
+        log('!! ' + e.message);
+      }
+    });
+  }
+
+  $('#zielSetBtn').addEventListener('click', () => {
+    const v = parseFloat($('#zielInput').value);
+    if (!Number.isFinite(v)) return;
+    send('z' + v);
   });
 
-  $('#goNowBtn').addEventListener('click', async () => {
-    const steps = ui.pendingSteps;
-    if (steps == null) return;
-    if (
-      !confirm(
-        `Der Motor fährt sofort auf Position ${fmtNum(steps)} — ohne GO-Bestätigung.\n\n` +
-          'Ist alles frei und niemand im Weg?'
-      )
-    )
-      return;
-    try {
-      await RatteSerial.moveTo(steps);
-    } catch (e) {
-      alert(e.message);
-    }
+  $('#trefferBtn').addEventListener('click', () => {
+    const v = parseFloat($('#weiteInput').value);
+    if (!Number.isFinite(v)) return;
+    /* Der Sketch antwortet mit "gespeichert: Pos … -> … m"; über dieses Echo
+     * landet der Schuss in der Messreihe. Doppelt eintragen wäre falsch. */
+    send('w' + v);
+    $('#weiteInput').value = '';
   });
 
-  $('#rawForm').addEventListener('submit', async (e) => {
+  $('#tempoBtn').addEventListener('click', () => {
+    const v = parseInt($('#tempoInput').value, 10);
+    if (!Number.isFinite(v)) return;
+    send('v' + v);
+  });
+
+  $('#spmBtn').addEventListener('click', () => {
+    const v = parseFloat($('#spmInput').value);
+    if (!Number.isFinite(v)) return;
+    send('k' + v);
+  });
+
+  $('#rawForm').addEventListener('submit', (e) => {
     e.preventDefault();
     const v = $('#rawInput').value.trim();
     if (!v) return;
-    try {
-      await RatteSerial.sendCommand(v);
-      $('#rawInput').value = '';
-    } catch (err) {
-      alert(err.message);
-    }
+    send(v);
+    $('#rawInput').value = '';
   });
 
+  /* --- Seil --- */
+  for (const sel of [$('#seilSelect'), $('#pruefSeil')]) {
+    sel.addEventListener('change', (e) => {
+      ui.seil = e.target.value;
+      renderAll();
+    });
+  }
+
+  /* Neu gebundenes Seil: die alten Messpunkte gelten dann nicht mehr, weil die
+   * Spannung eine andere ist. Hier bekommt es einen eigenen Eintrag — die
+   * Kurvenform des vorherigen dient als Startpunkt —, und im Arduino werden
+   * die Punkte im RAM verworfen. */
+  $('#newSeilBtn').addEventListener('click', async () => {
+    const name = nextSeilName();
+    if (
+      !confirm(
+        `„${name}" beginnen?\n\n` +
+          'Die bisherigen Seile bleiben hier erhalten. Im Arduino werden die ' +
+          'Messpunkte gelöscht (c), weil sie für das neue Seil nicht mehr gelten.\n\n' +
+          'Die Schätzung startet mit der Kurvenform des vorherigen Seils und ' +
+          'braucht nur zwei bis drei Schüsse, um sich darauf einzustellen.'
+      )
+    )
+      return;
+
+    await send('c');
+    ui.extraSeile.unshift(name);
+    ui.seil = name;
+    assignColors();
+    rebuild();
+  });
+
+  /* --- Testmodus --- */
+  $('#targetInput').addEventListener('input', renderEstimate);
+  $('#showAllSeile').addEventListener('change', renderChart);
+  $('#armBtn').addEventListener('click', () => armSteps(ui.testSteps));
+  $('#goNowBtn').addEventListener('click', () => moveNow(ui.testSteps));
+
+  $('#shotForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const steps = parseFloat($('#shotSteps').value);
+    const distance = parseFloat($('#shotDistance').value);
+    if (!Number.isFinite(steps) || !Number.isFinite(distance)) return;
+    recordShot({
+      steps,
+      distance,
+      winkel: winkelText(),
+      notiz: $('#shotNote').value,
+    });
+    $('#shotSteps').value = '';
+    $('#shotDistance').value = '';
+    $('#shotNote').value = '';
+  });
+
+  /* --- Prüfungsmodus --- */
+  $('#pruefDistanz').addEventListener('input', renderPruef);
+  $('#pruefArm').addEventListener('click', () => armSteps(ui.pruefSteps));
+
+  buildWinkelButtons();
+
+  for (const btn of $$('#richtungGroup .seg-btn')) {
+    btn.addEventListener('click', () => {
+      ui.richtung = btn.dataset.dir;
+      if (ui.richtung === 'geradeaus') ui.winkel = 0;
+      else if (!ui.winkel) ui.winkel = WINKEL_STUFEN[0];
+      syncAimButtons();
+      renderPruef();
+    });
+  }
+
+  $('#pruefResultForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const gemessen = parseFloat($('#pruefGemessen').value);
+    if (!Number.isFinite(gemessen)) return;
+
+    if (ui.pruefSteps == null) {
+      $('#pruefResultNote').textContent =
+        'Erst eine Entfernung vorgeben — ohne Steps lässt sich der Schuss nicht einordnen.';
+      return;
+    }
+
+    const ziel = parseFloat($('#pruefDistanz').value);
+    /* Vor dem Eintragen festhalten: recordShot rechnet das Modell neu, danach
+     * steht in ui.pruefSteps schon die nächste Schätzung. */
+    const gefahren = ui.pruefSteps;
+
+    recordShot({
+      steps: gefahren,
+      distance: gemessen,
+      ziel,
+      winkel: winkelText(),
+      notiz: 'Prüfung',
+    });
+
+    const abw = gemessen - ziel;
+    $('#pruefResultNote').textContent =
+      `Festgehalten: ${fmtNum(gefahren)} Steps → ${fmtNum(gemessen, 1)} m ` +
+      `(${abw >= 0 ? '+' : ''}${fmtNum(abw, 1)} m gegenüber dem Ziel). ` +
+      'Das Modell hat den Schuss schon aufgenommen.';
+    $('#pruefGemessen').value = '';
+  });
+
+  /* --- Daten --- */
   $('#exportBtn').addEventListener('click', () => RatteData.downloadCSV());
 
   $('#syncBtn').addEventListener('click', async () => {
@@ -569,12 +808,12 @@ function wireUI() {
       alert('Synchronisieren fehlgeschlagen.\n\n' + e.message);
     } finally {
       btn.disabled = false;
-      btn.textContent = 'Mit GitHub synchronisieren';
+      btn.textContent = 'Jetzt synchronisieren';
       renderSyncState();
     }
   });
 
-  /* Zugangsdaten */
+  /* --- Zugangsdaten --- */
   const dlg = $('#tokenDialog');
 
   $('#tokenBtn').addEventListener('click', () => {
@@ -586,33 +825,58 @@ function wireUI() {
   });
 
   dlg.addEventListener('close', () => {
-    if (dlg.returnValue === 'save') {
+    if (dlg.returnValue === 'save' || dlg.returnValue === 'clear') {
       RatteData.writeCfg({
         repo: $('#repoInput').value.trim(),
         branch: $('#branchInput').value.trim() || 'main',
-        token: $('#tokenInput').value.trim(),
-      });
-    } else if (dlg.returnValue === 'clear') {
-      RatteData.writeCfg({
-        repo: $('#repoInput').value.trim(),
-        branch: $('#branchInput').value.trim() || 'main',
-        token: '',
+        token: dlg.returnValue === 'save' ? $('#tokenInput').value.trim() : '',
       });
     }
     $('#tokenInput').value = '';
     renderSyncState();
   });
 
-  /* Vor dem Schließen warnen, solange etwas ungesichert ist. */
   window.addEventListener('beforeunload', (e) => {
     if (RatteData.isDirty()) e.preventDefault();
   });
 }
 
+function buildWinkelButtons() {
+  const group = $('#winkelGroup');
+  group.textContent = '';
+  for (const w of WINKEL_STUFEN) {
+    const b = document.createElement('button');
+    b.className = 'seg-btn';
+    b.dataset.winkel = String(w);
+    b.textContent = `${w}°`;
+    b.addEventListener('click', () => {
+      ui.winkel = w;
+      if (ui.richtung === 'geradeaus') ui.richtung = 'rechts';
+      syncAimButtons();
+      renderPruef();
+    });
+    group.appendChild(b);
+  }
+  syncAimButtons();
+}
+
+function syncAimButtons() {
+  for (const b of $$('#richtungGroup .seg-btn')) {
+    b.classList.toggle('is-on', b.dataset.dir === ui.richtung);
+  }
+  const geradeaus = ui.richtung === 'geradeaus';
+  for (const b of $$('#winkelGroup .seg-btn')) {
+    b.disabled = geradeaus;
+    b.classList.toggle(
+      'is-on',
+      !geradeaus && Number(b.dataset.winkel) === ui.winkel
+    );
+  }
+}
+
 /* Auf GitHub Pages lässt sich das Repository aus der Adresse ableiten. */
 function guessRepo() {
-  const host = location.hostname;
-  const m = host.match(/^([^.]+)\.github\.io$/);
+  const m = location.hostname.match(/^([^.]+)\.github\.io$/);
   if (!m) return '';
   const seg = location.pathname.split('/').filter(Boolean);
   return seg.length ? `${m[1]}/${seg[0]}` : '';
@@ -623,6 +887,10 @@ function guessRepo() {
 async function main() {
   wireUI();
   wireSerial();
+  setMode('test');
+
+  log('Noch nicht verbunden. „Verbinden" öffnet die USB-Verbindung zum Arduino (115200 Baud).');
+  log('Ohne Verbindung zeigen die Knöpfe nur, welcher Befehl gesendet würde.');
 
   try {
     await RatteData.load();
