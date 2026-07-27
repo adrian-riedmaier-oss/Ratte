@@ -1,0 +1,567 @@
+/* Rattenschleuder — Oberfläche.
+ * Farbrollen nach der validierten Referenzpalette. Hell und dunkel sind
+ * getrennt gewählt, nicht automatisch gespiegelt. */
+
+:root {
+  color-scheme: light;
+
+  --surface-1: #fcfcfb;
+  --plane: #f9f9f7;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.1);
+
+  --accent: #2a78d6;
+
+  /* Seile sind chronologisch geordnet, nicht bloß verschiedene Kategorien.
+   * Deshalb eine ordinale Stufung in einem Farbton statt bunter Serien:
+   * altes Seil hell, aktuelles Seil dunkel. Das skaliert auch, wenn weitere
+   * Seile dazukommen. */
+  --ramp-1: #86b6ef;
+  --ramp-2: #5598e7;
+  --ramp-3: #2a78d6;
+  --ramp-4: #1c5cab;
+  --ramp-5: #104281;
+
+  --good: #0ca30c;
+  --warning: #fab219;
+  --critical: #d03b3b;
+
+  --radius: 10px;
+  --gap: 1rem;
+
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+
+    --surface-1: #1a1a19;
+    --plane: #0d0d0d;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.1);
+
+    --accent: #3987e5;
+
+    /* Auf dunklem Grund läuft die Stufung andersherum: alt dunkel, neu hell. */
+    --ramp-1: #1c5cab;
+    --ramp-2: #2a78d6;
+    --ramp-3: #5598e7;
+    --ramp-4: #86b6ef;
+    --ramp-5: #b7d3f6;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --surface-1: #1a1a19;
+  --plane: #0d0d0d;
+  --text-primary: #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted: #898781;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --border: rgba(255, 255, 255, 0.1);
+
+  --accent: #3987e5;
+
+  /* Auf dunklem Grund läuft die Stufung andersherum: alt dunkel, neu hell. */
+  --ramp-1: #1c5cab;
+  --ramp-2: #2a78d6;
+  --ramp-3: #5598e7;
+  --ramp-4: #86b6ef;
+  --ramp-5: #b7d3f6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Eigene display-Werte schlagen sonst das [hidden] des Browsers. */
+[hidden] {
+  display: none !important;
+}
+
+body {
+  margin: 0;
+  padding: 0 1rem 4rem;
+  background: var(--plane);
+  color: var(--text-primary);
+  line-height: 1.55;
+  -webkit-text-size-adjust: 100%;
+}
+
+main,
+.page-head {
+  max-width: 60rem;
+  margin: 0 auto;
+}
+
+/* ---------------- Kopf ---------------- */
+
+.page-head {
+  padding: 2rem 0 1rem;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(1.6rem, 4vw, 2.2rem);
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+}
+
+.lede {
+  margin: 0.35rem 0 0;
+  color: var(--text-secondary);
+}
+
+.status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+
+.pill {
+  display: inline-block;
+  padding: 0.15rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-1);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.pill-quiet {
+  color: var(--text-muted);
+}
+
+.pill.ok {
+  color: var(--good);
+  border-color: color-mix(in srgb, var(--good) 45%, transparent);
+}
+
+.pill.warn {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 45%, transparent);
+}
+
+/* ---------------- Karten ---------------- */
+
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.15rem;
+  margin-top: var(--gap);
+}
+
+.card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.note {
+  margin: 0.4rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+}
+
+.hint {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+/* ---------------- Formulare ---------------- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.field.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.field.checkbox {
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+input,
+select {
+  font: inherit;
+  font-size: 0.95rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--axis);
+  border-radius: 8px;
+  background: var(--plane);
+  color: var(--text-primary);
+  min-width: 0;
+}
+
+input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  padding: 0;
+  accent-color: var(--accent);
+}
+
+input:focus-visible,
+select:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.input-unit {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-unit input {
+  width: 100%;
+  padding-right: 2rem;
+}
+
+.unit {
+  position: absolute;
+  right: 0.6rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  pointer-events: none;
+}
+
+/* ---------------- Knöpfe ---------------- */
+
+.btn {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.45rem 0.9rem;
+  border: 1px solid var(--axis);
+  border-radius: 8px;
+  background: var(--plane);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--text-muted);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.btn-danger {
+  background: var(--critical);
+  border-color: var(--critical);
+  color: #fff;
+}
+
+.btn-quiet {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+
+/* ---------------- Schätzung ---------------- */
+
+.estimate-grid {
+  display: grid;
+  grid-template-columns: minmax(8rem, 14rem) 1fr;
+  gap: var(--gap);
+  align-items: center;
+  margin-top: 0.6rem;
+}
+
+.result {
+  text-align: right;
+}
+
+.result-value {
+  font-size: clamp(2rem, 7vw, 3rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.result-label {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.result.out-of-range .result-value {
+  color: var(--warning);
+}
+
+.shot-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.75rem;
+  align-items: end;
+  margin-top: 0.9rem;
+}
+
+/* ---------------- Diagramm ---------------- */
+
+.chart-wrap {
+  margin-top: 0.75rem;
+  overflow-x: auto;
+}
+
+#chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-width: 20rem;
+  overflow: visible;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  margin-top: 0.6rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.legend-swatch {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  flex: none;
+}
+
+.chart-tip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  white-space: nowrap;
+  z-index: 5;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------- Tabellen ---------------- */
+
+.table-scroll {
+  overflow-x: auto;
+  margin-top: 0.75rem;
+}
+
+.table-tall {
+  max-height: 26rem;
+  overflow-y: auto;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.87rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 0.35rem 0.6rem;
+  border-bottom: 1px solid var(--grid);
+  white-space: nowrap;
+}
+
+.data-table th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-1);
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 0.8rem;
+  z-index: 1;
+}
+
+.data-table td.num,
+.data-table th.num {
+  text-align: right;
+}
+
+.data-table tr.is-best td {
+  font-weight: 600;
+}
+
+.data-table tr.is-pending td {
+  color: var(--text-secondary);
+}
+
+.row-tag {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0 0.35rem;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--warning) 25%, transparent);
+  color: var(--text-primary);
+  font-size: 0.72rem;
+}
+
+.icon-btn {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 0 0.25rem;
+  line-height: 1;
+}
+
+.icon-btn:hover {
+  color: var(--critical);
+}
+
+/* ---------------- Arduino ---------------- */
+
+.live-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.9rem;
+}
+
+.live-stat {
+  background: var(--plane);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+}
+
+.live-label {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.live-value {
+  font-size: 1.25rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.console {
+  margin-top: 0.9rem;
+}
+
+.console summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+}
+
+.serial-log {
+  max-height: 16rem;
+  overflow: auto;
+  margin: 0.6rem 0 0;
+  padding: 0.6rem;
+  background: var(--plane);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-secondary);
+}
+
+.raw-form {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.raw-form input {
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* ---------------- Dialog ---------------- */
+
+.dialog {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  color: var(--text-primary);
+  padding: 1.25rem;
+  max-width: 32rem;
+  width: calc(100% - 2rem);
+}
+
+.dialog::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.dialog form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+@media (max-width: 34rem) {
+  .estimate-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .result {
+    text-align: left;
+  }
+}

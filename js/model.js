@@ -158,40 +158,47 @@ const MODEL_POWER = {
   },
 };
 
-/* d = a*(1 - exp(-s/tau)) — Sättigung. Ab einem gewissen Auszug bringt mehr
- * Zug kaum noch Weite, weil das Gummi am Anschlag ist. tau wird per Gitter
- * gesucht, a ist bei festem tau linear lösbar. */
+/* d = c + a*(1 - exp(-(s-s0)/tau)) — Sättigung mit Offset.
+ *
+ * Ab einem gewissen Auszug bringt mehr Zug kaum noch Weite, weil das Gummi am
+ * Anschlag ist. Der Offset ist hier wesentlich: die Schleuder wirft erst ab
+ * einer Grundvorspannung überhaupt (bei diesem Aufbau um 16000 Schritte). Ohne
+ * c und s0 müsste die Kurve durch den Ursprung, was den Fit unbrauchbar macht.
+ *
+ * tau wird per Gitter gesucht; c und a sind bei festem tau linear lösbar. */
 const MODEL_SATURATING = {
   id: 'saturating',
   label: 'Sättigung',
   description: 'Mehr Steps bringen ab einem Punkt kaum noch Weite.',
   minPoints: 5,
   fit(points) {
-    const sMax = Math.max(...points.map((p) => p.steps)) || 1;
+    const steps = points.map((p) => p.steps);
+    const s0 = Math.min(...steps);
+    const span = Math.max(Math.max(...steps) - s0, 1);
+    const y = points.map((p) => p.distance);
     let best = null;
 
-    for (let i = 1; i <= 80; i++) {
-      const tau = (sMax * i) / 20;
-      const X = points.map((p) => [1 - Math.exp(-p.steps / tau)]);
-      const y = points.map((p) => p.distance);
+    for (let i = 1; i <= 120; i++) {
+      const tau = (span * i) / 30;
+      const X = points.map((p) => [1, 1 - Math.exp(-(p.steps - s0) / tau)]);
       const beta = olsFit(X, y);
       if (!beta) continue;
       let sse = 0;
       for (let k = 0; k < points.length; k++) {
-        const r = y[k] - beta[0] * X[k][0];
+        const r = y[k] - (beta[0] + beta[1] * X[k][1]);
         sse += r * r;
       }
-      if (!best || sse < best.sse) best = { sse, a: beta[0], tau };
+      if (!best || sse < best.sse) best = { sse, c: beta[0], a: beta[1], tau };
     }
 
     if (!best) return null;
-    const { a, tau } = best;
+    const { c, a, tau } = best;
     return {
-      predict(steps) {
-        return a * (1 - Math.exp(-steps / tau));
+      predict(s) {
+        return c + a * (1 - Math.exp(-(s - s0) / tau));
       },
-      params: [a, tau],
-      nParams: 2,
+      params: [c, a, tau, s0],
+      nParams: 3,
     };
   },
 };

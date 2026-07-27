@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Rattenschleuder — Konsole</title>
+    <link rel="stylesheet" href="css/style.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🐀</text></svg>"
+    />
+  </head>
+  <body>
+    <header class="page-head">
+      <h1>Rattenschleuder</h1>
+      <p class="lede">
+        Alle Schüsse an einem Ort. Das Modell lernt aus jedem neuen Wert mit.
+      </p>
+      <div class="status-row">
+        <span id="dataStatus" class="pill">lade Daten …</span>
+        <span id="pendingStatus" class="pill pill-quiet" hidden></span>
+      </div>
+    </header>
+
+    <main>
+      <!-- ---------------- Schätzung ---------------- -->
+      <section class="card" id="estimateCard">
+        <div class="card-head">
+          <h2>Schätzung</h2>
+          <label class="field inline">
+            <span>Seil</span>
+            <select id="seilSelect"></select>
+          </label>
+        </div>
+
+        <div class="estimate-grid">
+          <label class="field">
+            <span>Zieldistanz</span>
+            <div class="input-unit">
+              <input
+                id="targetInput"
+                type="number"
+                step="0.1"
+                min="0"
+                value="12"
+                inputmode="decimal"
+              />
+              <span class="unit">m</span>
+            </div>
+          </label>
+
+          <div class="result" id="resultBox">
+            <div class="result-value" id="resultSteps">—</div>
+            <div class="result-label" id="resultLabel">Steps</div>
+          </div>
+        </div>
+
+        <p class="note" id="estimateNote"></p>
+
+        <div class="btn-row">
+          <button id="armBtn" class="btn btn-primary" disabled>
+            Position vormerken
+          </button>
+          <button id="goNowBtn" class="btn" disabled>Sofort fahren</button>
+          <span class="hint" id="armHint">Arduino nicht verbunden</span>
+        </div>
+      </section>
+
+      <!-- ---------------- Diagramm ---------------- -->
+      <section class="card">
+        <div class="card-head">
+          <h2>Steps gegen Wurfweite</h2>
+          <label class="field inline checkbox">
+            <input type="checkbox" id="showAllSeile" />
+            <span>alle Seile zeigen</span>
+          </label>
+        </div>
+        <div class="chart-wrap">
+          <div id="chart" class="viz-root"></div>
+        </div>
+        <div class="legend" id="legend"></div>
+      </section>
+
+      <!-- ---------------- Modell ---------------- -->
+      <section class="card">
+        <div class="card-head">
+          <h2>Modell</h2>
+          <span class="hint" id="modelHint"></span>
+        </div>
+        <p class="note">
+          Fünf Modellfamilien treten bei jedem Laden neu gegeneinander an.
+          Bewertet wird per Leave-One-Out-Kreuzvalidierung: jeder Messpunkt wird
+          einmal weggelassen und dann vorhergesagt. Gewonnen hat die Familie mit
+          dem kleinsten Fehler auf ungesehenen Schüssen.
+        </p>
+        <div class="table-scroll">
+          <table class="data-table" id="modelTable">
+            <thead>
+              <tr>
+                <th>Familie</th>
+                <th class="num">RMSE</th>
+                <th class="num">MAE</th>
+                <th>Beschreibung</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ---------------- Neuer Schuss ---------------- -->
+      <section class="card">
+        <h2>Neuer Schuss</h2>
+        <p class="note">
+          Wird sofort gespeichert und fließt unmittelbar ins Modell ein.
+        </p>
+        <form id="shotForm" class="shot-form">
+          <label class="field">
+            <span>Steps</span>
+            <input id="shotSteps" type="number" step="1" required />
+          </label>
+          <label class="field">
+            <span>Gemessen</span>
+            <div class="input-unit">
+              <input
+                id="shotDistance"
+                type="number"
+                step="0.1"
+                min="0"
+                required
+                inputmode="decimal"
+              />
+              <span class="unit">m</span>
+            </div>
+          </label>
+          <label class="field">
+            <span>Notiz</span>
+            <input id="shotNote" type="text" placeholder="optional" />
+          </label>
+          <button type="submit" class="btn btn-primary">Speichern</button>
+        </form>
+      </section>
+
+      <!-- ---------------- Arduino ---------------- -->
+      <section class="card">
+        <div class="card-head">
+          <h2>Arduino</h2>
+          <span class="pill pill-quiet" id="serialState">getrennt</span>
+        </div>
+        <p class="note" id="serialIntro">
+          Verbindet sich per USB direkt mit dem Katapult-Sketch. Gemeldete
+          Schüsse landen automatisch in der Messreihe.
+        </p>
+
+        <div class="btn-row">
+          <button id="connectBtn" class="btn btn-primary">Verbinden</button>
+          <button id="disconnectBtn" class="btn" disabled>Trennen</button>
+          <button id="zeroBtn" class="btn" disabled>Nullpunkt (0)</button>
+          <button id="stopBtn" class="btn btn-danger" disabled>
+            NOT-STOPP
+          </button>
+        </div>
+
+        <div class="live-row">
+          <div class="live-stat">
+            <span class="live-label">Position</span>
+            <span class="live-value" id="livePos">—</span>
+          </div>
+          <div class="live-stat">
+            <span class="live-label">Ziel</span>
+            <span class="live-value" id="liveTarget">—</span>
+          </div>
+          <div class="live-stat">
+            <span class="live-label">Vorgemerkt</span>
+            <span class="live-value" id="liveArmed">—</span>
+          </div>
+        </div>
+
+        <details class="console">
+          <summary>Konsole</summary>
+          <pre id="serialLog" class="serial-log"></pre>
+          <form id="rawForm" class="raw-form">
+            <input
+              id="rawInput"
+              type="text"
+              placeholder="Befehl, z. B. z8 oder f200"
+              autocomplete="off"
+            />
+            <button type="submit" class="btn" id="rawSend" disabled>
+              Senden
+            </button>
+          </form>
+        </details>
+      </section>
+
+      <!-- ---------------- Daten ---------------- -->
+      <section class="card">
+        <div class="card-head">
+          <h2>Daten</h2>
+          <span class="hint" id="dataHint"></span>
+        </div>
+
+        <div class="btn-row">
+          <button id="exportBtn" class="btn">CSV herunterladen</button>
+          <button id="syncBtn" class="btn btn-primary">
+            Mit GitHub synchronisieren
+          </button>
+          <button id="tokenBtn" class="btn btn-quiet">Zugang …</button>
+        </div>
+        <p class="note" id="syncNote"></p>
+
+        <div class="table-scroll table-tall">
+          <table class="data-table" id="shotsTable">
+            <thead>
+              <tr>
+                <th class="num">Nr</th>
+                <th>Seil</th>
+                <th class="num">Steps</th>
+                <th class="num">Distanz</th>
+                <th>Zeit</th>
+                <th>Notiz</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <!-- ---------------- Zugangs-Dialog ---------------- -->
+    <dialog id="tokenDialog" class="dialog">
+      <form method="dialog">
+        <h2>GitHub-Zugang</h2>
+        <p class="note">
+          Zum Zurückschreiben der Messreihe ins Repository. Der Token bleibt
+          ausschließlich in diesem Browser (localStorage) und wird nie
+          weitergegeben. Empfohlen ist ein <em>fine-grained</em> Token, der nur
+          auf dieses eine Repository zeigt und dort genau
+          <em>Contents: read and write</em> darf. Ohne Token funktioniert alles
+          andere weiter — die Schüsse liegen dann lokal und lassen sich als CSV
+          exportieren.
+        </p>
+        <label class="field">
+          <span>Repository</span>
+          <input id="repoInput" type="text" placeholder="benutzer/repo" />
+        </label>
+        <label class="field">
+          <span>Branch</span>
+          <input id="branchInput" type="text" placeholder="main" />
+        </label>
+        <label class="field">
+          <span>Token</span>
+          <input id="tokenInput" type="password" placeholder="github_pat_…" />
+        </label>
+        <div class="btn-row">
+          <button value="save" class="btn btn-primary">Speichern</button>
+          <button value="clear" class="btn btn-danger">Token löschen</button>
+          <button value="cancel" class="btn btn-quiet">Abbrechen</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="js/model.js"></script>
+    <script src="js/data.js"></script>
+    <script src="js/chart.js"></script>
+    <script src="js/serial.js"></script>
+    <script src="js/app.js"></script>
+  </body>
+</html>
