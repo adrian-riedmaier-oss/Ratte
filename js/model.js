@@ -497,6 +497,16 @@ function buildModel(rawPoints, prior) {
     Math.max(...points.map((p) => p.steps)),
   ];
   result.measuredRange = own;
+
+  /* Für die Warnung zählt, ob die gewünschte WEITE schon einmal geschossen
+   * wurde — nicht, ob die errechnete Step-Zahl im gefahrenen Band liegt. Die
+   * gefittete Kurve läuft an den Rändern naturgemäß etwas neben den äußersten
+   * Messpunkten, wodurch sonst auch ganz normale Ziele wie 4 oder 25 m eine
+   * Warnung ausgelöst hätten. Eine Warnung, die dauernd angeht, wird ignoriert. */
+  result.distanceRange = [
+    Math.min(...points.map((p) => p.distance)),
+    Math.max(...points.map((p) => p.distance)),
+  ];
   result.searchRange = prior
     ? [Math.min(own[0], prior.range[0]), Math.max(own[1], prior.range[1])]
     : own;
@@ -575,15 +585,22 @@ function stepsForDistance(model, targetDistance) {
   }
 
   const steps = Math.round((a + b) / 2);
-  const measuredMin = sMin;
-  const measuredMax = sMax;
+
+  /* Ein Rand von der Größe der Vorhersagestreuung gilt noch als abgedeckt:
+   * einen halben Meter über der weitesten je geschossenen Weite zu landen ist
+   * keine Extrapolation, sondern liegt im Rauschen. */
+  const [dMin, dMax] = model.distanceRange;
+  const rand = model.uncertainty || 0;
+  const drunter = targetDistance < dMin - rand;
+  const drueber = targetDistance > dMax + rand;
 
   return {
     steps,
-    inRange: steps >= measuredMin && steps <= measuredMax,
-    note:
-      steps < measuredMin || steps > measuredMax
-        ? 'Achtung: außerhalb des gemessenen Step-Bereichs — extrapoliert.'
+    inRange: !drunter && !drueber,
+    note: drueber
+      ? `Weiter als je geschossen (bisher höchstens ${dMax.toFixed(1)} m) — extrapoliert.`
+      : drunter
+        ? `Kürzer als je geschossen (bisher mindestens ${dMin.toFixed(1)} m) — extrapoliert.`
         : '',
   };
 }

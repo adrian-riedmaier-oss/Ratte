@@ -131,6 +131,30 @@ in der Karte „Live-Position"; dort steht auch der Schalter, um ohne GO
 loszufahren — der hebt allerdings die Sicherung des Sketches auf und fragt
 deshalb nach.
 
+### Über welchen Bereich
+
+Nachgerechnet für jede Sollweite, jeweils mit einem Schuss, der 1,5 m zu kurz
+fällt. Entscheidend ist die Spalte rechts:
+
+| Sollweite | Korrektur nach dem ersten Schuss |
+| --------: | -------------------------------: |
+|       4 m |                    1.218 Steps vor |
+|       8 m |                      717 Steps vor |
+|      12 m |                      448 Steps vor |
+|      18 m |                      221 Steps vor |
+|      24 m |                      143 Steps vor |
+
+Derselbe Fehler von 1,5 m, aber fast der neunfache Unterschied in der Korrektur
+— unten ist die Kennlinie steil, oben flach. Genau deshalb reicht ein fester
+Schritte-pro-Meter-Wert nicht, wie ihn der Sketch verwendet. Ein zweiter Schuss,
+der dann trifft, verändert die Vormerkung nur noch um wenige Steps; der Kreis
+schwingt also nicht.
+
+Nutzbar ist der Bereich, den das aktuelle Seil abdeckt, plus ein Stück
+Extrapolation: bei Seil 4 rund 2 bis 32 m. Außerhalb der je geschossenen Weiten
+wird die Zahl orange und der Grund steht daneben; jenseits von etwa 33 m
+verweigert die Konsole die Auskunft, statt zu raten.
+
 ### Warum es nicht nur am Modell hängt
 
 Das Modell über alle Schüsse ist träge, und das ist meistens richtig: bei rund
