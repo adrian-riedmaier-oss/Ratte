@@ -157,3 +157,33 @@ nr,seil,zeit,steps,distanz_m,ziel_m,winkel,notiz
 157,Seil 4,16:26:46,23996,25.0,25,geradeaus,
 158,Seil 4,16:30:14,23748,22.4,22.4,geradeaus,
 159,Seil 4,16:33:17,23943,23.6,23.6,geradeaus,
+160,Seil 4,15:29:47,20881,15.6,12,geradeaus,automatisch vom Arduino
+161,Seil 4,15:30:59,19805,11.9,12,geradeaus,automatisch vom Arduino
+162,Seil 4,15:35:45,20639,14.2,14,geradeaus,automatisch vom Arduino
+163,Seil 4,15:39:10,21359,15,16,geradeaus,automatisch vom Arduino
+164,Seil 4,15:39:55,21508,17.1,16,geradeaus,automatisch vom Arduino
+165,Seil 4,15:40:38,21339,16.2,16,geradeaus,automatisch vom Arduino
+166,Seil 4,15:42:09,21964,19,18,geradeaus,automatisch vom Arduino
+167,Seil 4,15:43:06,21925,17,18,geradeaus,automatisch vom Arduino
+168,Seil 4,15:44:00,21994,18.5,18,geradeaus,automatisch vom Arduino
+169,Seil 4,15:44:50,22511,22.1,20,geradeaus,automatisch vom Arduino
+170,Seil 4,15:46:06,22446,22.1,20,geradeaus,automatisch vom Arduino
+171,Seil 4,15:47:02,22407,18.5,20,geradeaus,automatisch vom Arduino
+172,Seil 4,15:47:55,22399,20.4,20,geradeaus,automatisch vom Arduino
+173,Seil 4,15:49:06,22922,20.7,22,geradeaus,automatisch vom Arduino
+174,Seil 4,15:53:43,23031,22.2,22,geradeaus,automatisch vom Arduino
+175,Seil 4,15:55:35,23031,24.5,22,geradeaus,automatisch vom Arduino
+176,Seil 4,15:56:17,22858,20.8,22,geradeaus,automatisch vom Arduino
+177,Seil 4,15:57:03,22933,21.4,22,geradeaus,automatisch vom Arduino
+178,Seil 4,15:58:34,23467,23.3,24,geradeaus,automatisch vom Arduino
+179,Seil 4,16:00:32,23443,23.6,24,geradeaus,automatisch vom Arduino
+180,Seil 4,16:02:42,23539,23.6,24,geradeaus,automatisch vom Arduino
+181,Seil 4,16:03:38,23580,24,24,geradeaus,automatisch vom Arduino
+182,Seil 4,16:04:42,15968,2.5,4,geradeaus,automatisch vom Arduino
+183,Seil 4,16:07:31,17208,4.2,4,geradeaus,automatisch vom Arduino
+184,Seil 4,16:08:17,19127,11.1,10,geradeaus,automatisch vom Arduino
+185,Seil 4,16:09:15,18768,9.6,10,geradeaus,automatisch vom Arduino
+186,Seil 4,16:12:03,21290,16.1,16,geradeaus,automatisch vom Arduino
+187,Seil 4,16:13:05,19292,10.8,8,geradeaus,automatisch vom Arduino
+188,Seil 4,16:14:23,17910,7.5,8,geradeaus,automatisch vom Arduino
+189,Seil 4,16:15:52,15177,1.3,4,geradeaus,automatisch vom Arduino

@@ -14,7 +14,7 @@ const ui = {
   mode: 'test',
   seil: null,
   extraSeile: [], // neu gebunden, noch ohne Schuss
-  models: new Map(), // Seil -> Modell
+  models: new Map(), // Seil -> Modell, kommt aus RatteModel.buildAll
   colorOf: new Map(), // Seil -> Farbe
   richtung: 'geradeaus',
   hasArm: null, // ob der Sketch a<n> kennt (aus der Verbindungsprüfung)
@@ -109,25 +109,17 @@ function winkelText() {
 /* ---------- Modell ---------- */
 
 function rebuild() {
-  ui.models.clear();
-  const names = allSeilNames(); // neueste zuerst
+  /* Alle Seile werden gemeinsam gerechnet: eine geteilte Kurvenform über
+   * sämtliche Schüsse, dazu für jedes Seil sein eigener Versatz. So steht bei
+   * jeder Weite die volle Messreihe zur Verfügung, ohne die Unterschiede
+   * zwischen den Seilen einzuebnen. */
+  const chronologisch = allSeilNames().slice().reverse();
+  const ropes = chronologisch.map((name) => ({
+    name,
+    points: RatteData.pointsFor(name),
+  }));
 
-  names.forEach((name, i) => {
-    /* Vorwissen kommt vom zuletzt davor gespannten Seil — einer einzelnen,
-     * zusammenhängenden Kennlinie. Alle Vorseile zusammengeworfen ergäben eine
-     * verschmierte Durchschnittsform, die deutlich schlechter trägt: im Test
-     * lag der Fehler eines frischen Seils damit bei 2,0 m statt bei 0,8 m. */
-    let prior = null;
-    for (let j = i + 1; j < names.length && !prior; j++) {
-      prior = RatteModel.buildReference(RatteData.pointsFor(names[j]));
-    }
-
-    ui.models.set(
-      name,
-      RatteModel.buildModel(RatteData.pointsFor(name), prior)
-    );
-  });
-
+  ui.models = RatteModel.buildAll(ropes);
   renderAll();
 }
 
@@ -153,70 +145,6 @@ function renderSeilSelects() {
   }
 }
 
-/* ---------- Nachlauf ----------
- *
- * Das Modell über die ganze Messreihe ist träge, und das ist meistens richtig:
- * bei rund einem Meter Streuung von Schuss zu Schuss darf ein einzelner
- * Ausreißer die Kurve nicht verbiegen.
- *
- * Nur gilt das genau dann nicht mehr, wenn sich das Seil im Lauf einer Sitzung
- * verändert — es dehnt sich, es wird warm. Dann liegen die letzten Schüsse
- * systematisch auf einer Seite, und das Modell braucht Dutzende Schüsse, um
- * nachzuziehen. Der Sketch macht den umgekehrten Fehler: er rechnet die
- * Korrektur allein aus dem letzten Schuss und schwingt dadurch über.
- *
- * Deshalb hier beides getrennt: die Kurvenform kommt aus allen Schüssen, die
- * Höhenlage aus den letzten paar. Der Nachlauf ist der exponentiell gewichtete
- * Mittelwert von gemessen minus vorhergesagt. Ein einzelner Ausreißer bewegt
- * ihn nur zum Teil und klingt wieder ab; mehrere Schüsse in dieselbe Richtung
- * setzen sich durch.
- */
-
-const NACHLAUF_SCHUESSE = 8;
-const NACHLAUF_ALPHA = 0.6; // Gewicht je Schuss weiter zurück
-const NACHLAUF_NAEHE_M = 7; // ab welcher Entfernung ein Schuss wenig aussagt
-const NACHLAUF_MAX_M = 2.5; // Sicherheitsgrenze gegen Weglaufen
-
-/* Zusätzlich zur Aktualität zählt die Nähe zum Ziel. Ein Versatz, der bei 24 m
- * gemessen wurde, sagt wenig über einen Schuss auf 12 m — er kann genauso gut
- * daher rühren, dass die Kurvenform am weiten Ende leicht danebenliegt. Ohne
- * diese Gewichtung verschöbe der Nachlauf die Schätzung quer über den ganzen
- * Bereich; im Test sprang sie dadurch um 465 Steps in die falsche Richtung.
- *
- * Liegen alle jüngsten Schüsse weit vom Ziel weg, geht der Nachlauf gegen null
- * und es bleibt beim reinen Modell — die sichere Voreinstellung. */
-function nachlauf(seil, model, target) {
-  if (!model || !model.ready) return 0;
-
-  const letzte = RatteData.allRows()
-    .filter((r) => r.seil === seil)
-    .slice(-NACHLAUF_SCHUESSE);
-  if (letzte.length < 2) return 0;
-
-  let summe = 0;
-  let gewichte = 0;
-
-  letzte.forEach((r, i) => {
-    const s = parseFloat(r.steps);
-    const d = parseFloat(r.distanz_m);
-    if (!Number.isFinite(s) || !Number.isFinite(d)) return;
-
-    const aktualitaet = Math.pow(NACHLAUF_ALPHA, letzte.length - 1 - i);
-    const naehe = Number.isFinite(target)
-      ? Math.exp(-Math.pow((d - target) / NACHLAUF_NAEHE_M, 2))
-      : 1;
-
-    const g = aktualitaet * naehe;
-    summe += g * (d - model.fitted.predict(s));
-    gewichte += g;
-  });
-
-  /* Zu wenig Gewicht beisammen heißt: nichts Belastbares in der Nähe. */
-  if (gewichte < 0.25) return 0;
-  const b = summe / gewichte;
-  return Math.max(-NACHLAUF_MAX_M, Math.min(NACHLAUF_MAX_M, b));
-}
-
 /* Gemeinsame Rechnung für beide Modi. */
 function estimate(target) {
   const model = currentModel();
@@ -225,10 +153,7 @@ function estimate(target) {
   if (!Number.isFinite(target))
     return { ok: false, note: 'Zieldistanz eingeben.' };
 
-  /* Fliegt es zuletzt weiter als vorhergesagt, muss weniger weit gespannt
-   * werden — also wird die Zielweite um den Nachlauf zurückgenommen. */
-  const b = nachlauf(ui.seil, model, target);
-  const res = RatteModel.stepsForDistance(model, target - b);
+  const res = RatteModel.stepsForDistance(model, target);
 
   if (!res || res.steps == null)
     return {
@@ -243,24 +168,34 @@ function estimate(target) {
     steps: res.steps,
     inRange: res.inRange,
     note: res.note,
-    bias: b,
+    delta: res.delta,
+    localShots: res.localShots,
   };
 }
 
-function modelSuffix(model, bias) {
-  const n = model.points.length;
-  return (
-    `Modell „${model.best.label}" aus ${n} Schüssen von ${ui.seil}.` +
-    (model.usesPrior
-      ? n < 8
-        ? ' Stützt sich noch auf die Kurvenform des vorherigen Seils — mit jedem Schuss löst es sich davon.'
-        : ' Die Kurvenform des vorherigen Seils sagt hier zuverlässiger vorher als eine frei gefittete.'
-      : '') +
-    (Math.abs(bias || 0) >= 0.05
-      ? ` Die letzten Schüsse liegen im Schnitt ${fmtNum(Math.abs(bias), 1)} m ` +
-        `${bias > 0 ? 'weiter' : 'kürzer'} als vorhergesagt — das ist eingerechnet.`
-      : '')
-  );
+function modelSuffix(r) {
+  const m = r.model;
+  const eigene = m.points.length;
+  const gesamt = m.shape ? m.shape.points.length : eigene;
+
+  let text =
+    `Kurvenform „${m.best.label}" aus allen ${gesamt} Schüssen, ` +
+    `Höhenlage von ${ui.seil} aus dessen ${eigene} eigenen ` +
+    `(Versatz ${m.offset >= 0 ? '+' : ''}${fmtNum(m.offset, 2)} m).`;
+
+  if (r.localShots >= 2) {
+    text +=
+      ` Feinabgleich aus ${r.localShots} Schüssen in der Nähe dieser Weite: ` +
+      `${r.delta >= 0 ? '+' : ''}${fmtNum(r.delta)} Steps.`;
+  }
+
+  if (m.usesShared) {
+    text +=
+      ' Das Seil hat noch zu wenige eigene Schüsse für eine eigene Höhenlage —' +
+      ' es übernimmt die des vorherigen.';
+  }
+
+  return text;
 }
 
 function renderEstimate() {
@@ -282,7 +217,7 @@ function renderEstimate() {
     )} m Streuung`;
     if (!r.inRange) box.classList.add('out-of-range');
     $('#estimateNote').textContent =
-      (r.note ? r.note + ' ' : '') + modelSuffix(r.model, r.bias);
+      (r.note ? r.note + ' ' : '') + modelSuffix(r);
     ui.testSteps = r.steps;
   }
 
@@ -314,7 +249,7 @@ function renderPruef() {
     if (!r.inRange) box.classList.add('out-of-range');
     $('#pruefNote').textContent =
       (r.note ? r.note + ' ' : '') +
-      modelSuffix(r.model, r.bias) +
+      modelSuffix(r) +
       ' Der Winkel dreht nur das Gerät — auf die Vorspannung wirkt er nicht, ' +
       'er wird aber mitgeschrieben.';
     ui.pruefSteps = r.steps;
@@ -424,13 +359,6 @@ function renderModelTable() {
 
     const name = document.createElement('td');
     name.textContent = c.label + (c === model.best ? '  ✓' : '');
-    if (c.fromPrior) {
-      const tag = document.createElement('span');
-      tag.className = 'row-tag';
-      tag.textContent = 'Vorseil';
-      tag.title = 'Übernimmt die Kurvenform des vorherigen Seils';
-      name.appendChild(tag);
-    }
 
     const rmse = document.createElement('td');
     rmse.className = 'num';
@@ -672,13 +600,14 @@ async function nachfuehren(gemessen) {
       `(${vorzeichen}${fmtNum(abw, 1)} m)` +
       (Math.abs(abw) <= ZIELFENSTER_M ? ' — im Zielfenster' : '')
   );
+  const gesamt = r.model.shape ? r.model.shape.points.length : r.model.points.length;
   log(
-    `>> Konsole rechnet neu über ${r.model.points.length} Schüsse ` +
-      `(${r.model.best.label}${
-        Math.abs(r.bias || 0) >= 0.05
-          ? `, Nachlauf ${r.bias > 0 ? '+' : '−'}${fmtNum(Math.abs(r.bias), 1)} m`
-          : ''
-      }): ${fmtNum(r.steps)} Steps`
+    `>> Konsole rechnet neu über alle ${gesamt} Schüsse ` +
+      `(${r.model.best.label}` +
+      (r.localShots >= 2
+        ? `, Feinabgleich ${r.delta >= 0 ? '+' : ''}${fmtNum(r.delta)} Steps aus ${r.localShots} Schüssen nahe ${fmtNum(aktuellesZiel(), 1)} m`
+        : '') +
+      `): ${fmtNum(r.steps)} Steps`
   );
 
   if ($('#autoDrive').checked) {
