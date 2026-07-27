@@ -212,12 +212,18 @@ ohne Token.
 
 ## Einrichten
 
-1. Diesen Branch nach `main` bringen.
-2. In den Repository-Einstellungen unter **Pages** als Quelle **GitHub Actions**
-   wählen. `.github/workflows/pages.yml` veröffentlicht dann bei jedem Push auf
-   `main`.
-3. Für das Zurückschreiben einmalig den Token hinterlegen (siehe oben).
-4. Für die USB-Verbindung `sketch/katapult_autokalibrierung.ino` aufspielen.
+1. **Settings → Pages → Build and deployment**: *Source* auf
+   **Deploy from a branch**, Branch **`main`**, Ordner **`/ (root)`**, dann
+   *Save*. Die Seite steht kurz darauf unter
+   `https://<benutzer>.github.io/Ratte/`.
+
+   Ein Workflow ist dafür nicht nötig — die Seite ist reines HTML ohne
+   Bauschritt, GitHub liefert den Repository-Inhalt direkt aus. Jeder Push auf
+   `main` veröffentlicht automatisch neu. Die leere Datei `.nojekyll` schaltet
+   die Jekyll-Vorverarbeitung ab, die sonst über die Dateien laufen würde.
+
+2. Für das Zurückschreiben einmalig den Token hinterlegen (siehe oben).
+3. Für die USB-Verbindung `sketch/katapult_autokalibrierung.ino` aufspielen.
 
 Lokal genügt ein beliebiger statischer Server im Projektordner, etwa
 `python3 -m http.server` — es gibt keinen Bauschritt und keine Abhängigkeiten.
@@ -226,6 +232,7 @@ Lokal genügt ein beliebiger statischer Server im Projektordner, etwa
 
 ```
 index.html                Konsole
+.nojekyll                 schaltet die Jekyll-Vorverarbeitung von Pages ab
 css/style.css             Darstellung, hell und dunkel
 js/model.js               Modellfamilien, Kreuzvalidierung, Umkehrung
 js/data.js                Laden, Zusammenführen, Zurückschreiben
