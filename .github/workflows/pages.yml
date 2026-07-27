@@ -29,13 +29,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # enablement schaltet Pages beim ersten Lauf selbst frei, sofern es in den
-      # Repository-Einstellungen noch nicht aktiv ist. Spart den Handgriff unter
-      # Settings -> Pages; schlägt es fehl, dort einmal "GitHub Actions" als
-      # Quelle wählen und den Lauf wiederholen.
+      # Pages muss einmalig von Hand freigeschaltet werden:
+      # Settings -> Pages -> Source: "GitHub Actions".
+      # Automatisch geht das nicht — das Anlegen einer Pages-Seite verlangt
+      # Administrationsrechte, die der Actions-Token grundsätzlich nicht
+      # bekommt ("Resource not accessible by integration"). Danach läuft alles
+      # Weitere ohne Zutun.
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
